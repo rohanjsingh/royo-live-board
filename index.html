@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Setup Live Board</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: one column on phones (setups, then the alert feed), two columns from 900px. Single dark look, like the casebook. */
+:root {
+  --bg: #0d0e11; --panel: #16181d; --panel-2: #1c1f26; --line: #ffffff14; --fg: #e8eaee; --muted: #9aa0aa; --faint: #6b7280;
+  --accent: #ffb347; --accent-a: #ff7a18; --accent-b: #ffd166; --up: #3ddc97; --down: #ff6b6b; --warn: #ffb347;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif; --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.45 var(--display); font-variant-numeric: tabular-nums;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: calc(16px + env(safe-area-inset-top, 0px)) calc(28px + env(safe-area-inset-bottom, 0px)); }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px; }
+.brand { font-weight: 800; font-size: 30px; letter-spacing: -.02em; margin: 0;
+  background: linear-gradient(90deg, var(--accent-a), var(--accent) 45%, var(--accent-b)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.sub { color: var(--muted); font-size: 14px; }
+.right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); display: inline-block; margin-right: 6px; vertical-align: 1px; }
+.dot.live { background: var(--up); box-shadow: 0 0 0 3px #3ddc9726; }
+.dot.wait { background: var(--warn); }
+button, input { font: inherit; }
+.btn { background: var(--panel-2); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; cursor: pointer; }
+.btn.primary { background: linear-gradient(90deg, var(--accent-a), var(--accent)); color: #1a1206; border: 0; font-weight: 700; }
+.btn:focus-visible, input:focus-visible { outline: 2px solid var(--accent-b); outline-offset: 2px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+.signin { max-width: 460px; display: grid; gap: 12px; }
+.signin h2 { margin: 0; font-size: 20px; }
+.signin p { margin: 0; color: var(--muted); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.row input { flex: 1 1 220px; min-width: 0; background: var(--panel-2); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; }
+.note { color: var(--muted); font-size: 14px; }
+.tiles { display: flex; flex-wrap: wrap; gap: 8px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px; display: flex; gap: 8px; align-items: baseline; }
+.tile b { font: 600 18px var(--mono); }
+.tile span { color: var(--muted); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.cols { display: grid; gap: 18px; grid-template-columns: 1fr; }
+@media (min-width: 900px) { .cols { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); } }
+h3 { margin: 0 0 10px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.list { display: grid; gap: 10px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; gap: 8px; min-width: 0; }
+.card.closed { opacity: .72; }
+.top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.grade { font: 700 13px var(--mono); padding: 3px 9px; border-radius: 8px; color: #1a1206; }
+.g-Aplus { background: linear-gradient(90deg, var(--accent-a), var(--accent-b)); }
+.g-A { background: var(--accent); }
+.g-B { background: #c9ccd2; }
+.tk { font-weight: 800; font-size: 20px; letter-spacing: -.01em; }
+.dir { font: 600 13px var(--mono); }
+.dir.long { color: var(--up); } .dir.short { color: var(--down); }
+.setup { color: var(--muted); font-size: 14px; }
+.pill { margin-left: auto; font: 600 12px var(--mono); padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.pill.open { color: var(--accent-b); border-color: #ffd16655; }
+.pill.trimmed { color: var(--up); border-color: #3ddc9755; }
+.pill.closed { color: var(--muted); }
+.nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(68px, 1fr)); gap: 6px 14px; font-family: var(--mono); font-size: 14px; }
+.nums div span { display: block; color: var(--faint); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-family: var(--display); }
+.pos { color: var(--up); } .neg { color: var(--down); }
+.why { color: #c9ccd2; font-size: 14px; overflow-wrap: anywhere; }
+.warn { color: var(--warn); font-size: 13px; overflow-wrap: anywhere; }
+.feed .item { border-bottom: 1px solid var(--line); padding: 10px 2px; display: grid; gap: 3px; min-width: 0; }
+.feed .item:last-child { border-bottom: 0; }
+.meta { display: flex; gap: 8px; align-items: center; font: 500 12px var(--mono); color: var(--faint); }
+.kind { padding: 1px 7px; border-radius: 6px; border: 1px solid var(--line); text-transform: uppercase; letter-spacing: .06em; }
+.kind.setup { color: var(--accent-b); } .kind.watch { color: #9ec5ff; } .kind.monitor { color: var(--up); }
+.ttl { font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
+.bd { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.empty { color: var(--muted); font-size: 14px; padding: 6px 2px; }
+footer { color: var(--faint); font-size: 12px; }
+@media (prefers-reduced-motion: no-preference) { .card.fresh { animation: glow 2.4s ease-out; } }
+@keyframes glow { from { box-shadow: 0 0 0 2px var(--accent); } to { box-shadow: 0 0 0 0 transparent; } }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 class="brand">Live Board</h1>
+    <span class="sub" id="day">Today's A+, A and B setups</span>
+    <div class="right">
+      <span id="conn"><span class="dot" id="dot"></span><span id="connText">Offline</span></span>
+      <span id="who" hidden></span>
+      <button class="btn" id="signout" hidden>Sign out</button>
+    </div>
+  </header>
+
+  <section class="panel signin" id="setupNote" hidden>
+    <h2>Not connected yet</h2>
+    <p>Add the Supabase project URL and its anon key at the top of the script in this page, then reload.</p>
+  </section>
+
+  <section class="panel signin" id="signin" hidden>
+    <h2>Sign in</h2>
+    <p>Enter your email and we'll send you a sign-in link. Only invited emails can see the board.</p>
+    <form class="row" id="form">
+      <label for="email" hidden>Email</label>
+      <input id="email" type="email" required autocomplete="email" placeholder="you@example.com">
+      <button class="btn primary" type="submit" id="send">Email me a link</button>
+    </form>
+    <p class="note" id="formMsg"></p>
+  </section>
+
+  <section class="panel signin" id="notInvited" hidden>
+    <h2>Not on the list yet</h2>
+    <p>You're signed in, but this email isn't invited to the board. Ask royo to add it.</p>
+  </section>
+
+  <main id="board" hidden>
+    <div class="tiles" id="tiles"></div>
+    <div class="cols" style="margin-top:18px">
+      <section>
+        <h3>Setups</h3>
+        <div class="list" id="setups"></div>
+      </section>
+      <section>
+        <h3>Alert feed</h3>
+        <div class="panel feed" id="feed"></div>
+      </section>
+    </div>
+  </main>
+
+  <footer>Setups from royo's options-flow scanner, about a minute behind the market. Grades: A+ score 8+, A 7, B 6. A record of what the scanner saw, not financial advice.</footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js"></script>
+<script>
+// Fill these two after creating the Supabase project (Project Settings -> API). The anon key is public by design:
+// what it can read is limited by the row-level security in liveboard/schema.sql (invited emails only).
+const SUPABASE_URL = "https://tueorucqkeisbuujhzgp.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_slbEW6GzUVojZKpQzeRcow_J0nIVEvK";   // publishable: public by design
+
+const $ = (id) => document.getElementById(id);
+const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+const setups = new Map(), alerts = new Map();
+let client = null, channel = null, fresh = new Set();
+
+$("day").textContent = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", month: "short", day: "numeric" })
+  .format(new Date()) + " · A+, A and B setups";
+
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function num(v) { return v == null || v === "" ? "–" : Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 }); }
+function setConn(state, text) { $("dot").className = "dot " + state; $("connText").textContent = text; }
+
+function render() {
+  const rows = [...setups.values()].sort((a, b) => {
+    const rank = { open: 0, trimmed: 1, null: 2, undefined: 2, closed: 3 };
+    return (rank[a.live_status] ?? 2) - (rank[b.live_status] ?? 2) || String(b.first_seen || b.trigger_time).localeCompare(String(a.first_seen || a.trigger_time));
+  });
+  const box = $("setups"); box.replaceChildren();
+  if (!rows.length) box.append(el("div", "empty", "No A+, A or B setups yet today. New ones appear here within about a minute."));
+  for (const r of rows) {
+    const card = el("article", "card" + (r.live_status === "closed" ? " closed" : "") + (fresh.has(r.id) ? " fresh" : ""));
+    const top = el("div", "top");
+    top.append(el("span", "grade g-" + (r.grade === "A+" ? "Aplus" : r.grade), r.grade), el("span", "tk", r.ticker),
+      el("span", "dir " + r.direction, r.direction === "long" ? "▲ long" : "▼ short"), el("span", "setup", r.setup + " · " + (r.trigger_time || "")));
+    top.append(el("span", "pill " + (r.live_status || ""), r.live_status || r.status || "found"));
+    const nums = el("div", "nums");
+    const cell = (k, v, cls) => { const d = el("div", cls); d.append(el("span", null, k), document.createTextNode(v)); return d; };
+    nums.append(cell("Entry", num(r.entry)), cell("Stop", num(r.stop)), cell("Trim", num(r.trim)));
+    if (r.net_pct != null) nums.append(cell("Net", (r.net_pct > 0 ? "+" : "") + num(r.net_pct) + "%", r.net_pct > 0 ? "pos" : r.net_pct < 0 ? "neg" : ""));
+    card.append(top, nums);
+    if (r.trigger_summary) card.append(el("div", "why", r.trigger_summary));
+    for (const w of r.warnings || []) card.append(el("div", "warn", "! " + w));
+    box.append(card);
+  }
+  const t = $("tiles"); t.replaceChildren();
+  const count = (f) => rows.filter(f).length;
+  for (const [k, v] of [["A+", count(r => r.grade === "A+")], ["A", count(r => r.grade === "A")], ["B", count(r => r.grade === "B")],
+                        ["Open", count(r => r.live_status === "open" || r.live_status === "trimmed")], ["Closed", count(r => r.live_status === "closed")]]) {
+    const d = el("div", "tile"); d.append(el("b", null, String(v)), el("span", null, k)); t.append(d);
+  }
+  const feed = $("feed"); feed.replaceChildren();
+  const items = [...alerts.values()].sort((a, b) => String(b.at).localeCompare(String(a.at)) || String(b.created_at).localeCompare(String(a.created_at)));
+  if (!items.length) feed.append(el("div", "empty", "No alerts yet today."));
+  for (const a of items.slice(0, 80)) {
+    const it = el("div", "item"), meta = el("div", "meta");
+    meta.append(el("span", null, a.at + " ET"), el("span", "kind " + a.kind, a.kind));
+    it.append(meta, el("div", "ttl", a.title));
+    if (a.body) it.append(el("div", "bd", a.body));
+    feed.append(it);
+  }
+}
+
+async function load() {
+  const [s, a] = await Promise.all([
+    client.from("setups").select("*").eq("day", today),
+    client.from("alerts").select("*").eq("day", today).order("at", { ascending: false }).limit(200),
+  ]);
+  if (s.error || a.error) { setConn("wait", "Can't load: " + (s.error || a.error).message); return; }
+  setups.clear(); alerts.clear();
+  for (const r of s.data) setups.set(r.id, r);
+  for (const r of a.data) alerts.set(r.id, r);
+  render();
+}
+
+function subscribe() {
+  if (channel) client.removeChannel(channel);
+  channel = client.channel("board")
+    .on("postgres_changes", { event: "*", schema: "public", table: "setups", filter: "day=eq." + today }, (p) => {
+      if (p.eventType === "DELETE") setups.delete(p.old.id); else { if (!setups.has(p.new.id)) fresh.add(p.new.id); setups.set(p.new.id, p.new); }
+      render();
+    })
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "alerts", filter: "day=eq." + today }, (p) => { alerts.set(p.new.id, p.new); render(); })
+    .subscribe((status) => setConn(status === "SUBSCRIBED" ? "live" : "wait", status === "SUBSCRIBED" ? "Live" : "Reconnecting…"));
+}
+
+async function enter(session) {
+  $("signin").hidden = true;
+  $("who").hidden = false; $("who").textContent = session.user.email; $("signout").hidden = false;
+  const me = await client.from("viewers").select("email").limit(1);
+  if (me.error || !me.data.length) { $("notInvited").hidden = false; $("board").hidden = true; setConn("", "Not invited"); return; }
+  $("notInvited").hidden = true; $("board").hidden = false;
+  await load(); subscribe();
+}
+
+function leave() {
+  if (channel) { client.removeChannel(channel); channel = null; }
+  $("board").hidden = true; $("notInvited").hidden = true; $("signin").hidden = false;
+  $("who").hidden = true; $("signout").hidden = true; setConn("", "Signed out");
+}
+
+async function start() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !window.supabase) { $("setupNote").hidden = false; return; }
+  client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, detectSessionInUrl: true } });
+  const { data } = await client.auth.getSession();
+  if (data.session) enter(data.session); else leave();
+  client.auth.onAuthStateChange((evt, session) => { if (evt === "SIGNED_IN" && session) enter(session); if (evt === "SIGNED_OUT") leave(); });
+  $("form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    $("send").disabled = true; $("formMsg").textContent = "Sending…";
+    const { error } = await client.auth.signInWithOtp({ email: $("email").value.trim(), options: { emailRedirectTo: location.origin + location.pathname, shouldCreateUser: true } });
+    $("formMsg").textContent = error ? "Couldn't send the link: " + error.message : "Check your email for the sign-in link.";
+    $("send").disabled = false;
+  });
+  $("signout").addEventListener("click", () => client.auth.signOut());
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && channel) load(); });   // catch up after the phone sleeps
+  setInterval(() => { if (channel && !document.hidden) load(); }, 5 * 60 * 1000);
+}
+start();
+</script>
+</body>
+</html>
