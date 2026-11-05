@@ -109,6 +109,10 @@ dialog#chartDlg::backdrop { background: #000a; }
 .dlghead { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .dlghead .tk { font-size: 22px; }
 .dlghead .close { margin-left: auto; }
+.dlgnav { display: inline-flex; gap: 6px; align-items: center; }
+.dlgnav .btn, .dlghead .close { width: 34px; height: 34px; padding: 0; display: inline-grid; place-items: center; font-size: 18px; line-height: 1; border-radius: 10px; }
+.dlgnav .btn:disabled { opacity: .35; cursor: default; }
+.dlgnav .count { color: var(--muted); font-size: 13px; min-width: 44px; text-align: center; }
 .tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .tools .tab { padding: 4px 11px; font-size: 13px; }
 .tools label { color: var(--muted); font-size: 13px; display: inline-flex; gap: 5px; align-items: center; margin-left: 6px; }
@@ -117,7 +121,7 @@ dialog#chartDlg::backdrop { background: #000a; }
 .gexhead input[type=range] { flex: 1 1 200px; accent-color: var(--accent); }
 #gexSvg { width: 100%; display: block; }
 .gexnote { color: var(--faint); font-size: 12px; }
-@media (max-width: 600px) { #chartBox { height: 280px; } dialog#chartDlg { width: 100vw; max-height: 100dvh; border-radius: 0; } }
+@media (max-width: 600px) { #chartBox { height: 280px; } dialog#chartDlg { width: calc(100vw - 16px); max-height: calc(100dvh - 48px); border-radius: 14px; } .dlg { max-height: calc(100dvh - 50px); } }
 </style>
 </head>
 <body>
@@ -222,7 +226,8 @@ dialog#chartDlg::backdrop { background: #000a; }
     <div class="dlg">
       <div class="dlghead">
         <span class="tk" id="dlgTitle"></span><span class="setup" id="dlgSub"></span>
-        <button class="btn close" type="button" id="dlgClose">Close</button>
+        <span class="dlgnav" id="dlgNav"><button class="btn" type="button" id="dlgPrev" aria-label="Previous setup">‹</button><span class="count" id="dlgCount"></span><button class="btn" type="button" id="dlgNext" aria-label="Next setup">›</button></span>
+        <button class="btn close" type="button" id="dlgClose" aria-label="Close">✕</button>
       </div>
       <div class="result" id="dlgResult"></div>
       <div class="tools" id="tfTabs">
@@ -261,6 +266,7 @@ const $ = (id) => document.getElementById(id);
 const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 const setups = new Map(), alerts = new Map();
 let client = null, channel = null, fresh = new Set();
+let chartList = [], chartIdx = -1, chartSeq = 0;   // chart window: setups in the order shown, for the ‹ › arrows
 let viewDay = today, lastDay = null, sessions = [];   // today, or an earlier session that has setups (last 10)
 const FINAL = new Set(["win", "loss", "scratch", "ungraded"]);
 const fmtDay = (d) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" }).format(new Date(d + "T12:00:00Z"));
@@ -277,7 +283,7 @@ function render() {
     const rank = { open: 0, trimmed: 1, null: 2, undefined: 2, closed: 3 };
     return (rank[a.live_status] ?? 2) - (rank[b.live_status] ?? 2) || String(b.first_seen || b.trigger_time).localeCompare(String(a.first_seen || a.trigger_time));
   });
-  const box = $("setups"); box.replaceChildren();
+  const box = $("setups"); box.replaceChildren(); chartList = viewDay !== today ? rows : [];
   if (!rows.length) box.append(el("div", "empty", viewDay === today
     ? "No A+, A or B setups yet today. New ones appear here within about a minute." : "No A+, A or B setups that session."));
   for (const r of rows) {
@@ -293,7 +299,7 @@ function render() {
     if (r.net_pct != null) nums.append(cell("Net", (r.net_pct > 0 ? "+" : "") + num(r.net_pct) + "%", r.net_pct > 0 ? "pos" : r.net_pct < 0 ? "neg" : ""));
     card.append(top, nums);
     if (done && r.status) { const res = el("div", "result"); res.append(el("span", null, "Result"), document.createTextNode(r.status)); card.append(res); }
-    if (viewDay !== today) { const b = el("button", "btn chartbtn", "Chart"); b.type = "button"; b.addEventListener("click", () => openChart(r)); card.append(b); }
+    if (viewDay !== today) { const b = el("button", "btn chartbtn", "Chart"); b.type = "button"; b.addEventListener("click", () => openChart(r, rows.indexOf(r))); card.append(b); }
     if (r.trigger_summary) card.append(el("div", "why", r.trigger_summary));
     for (const w of r.warnings || []) card.append(el("div", "warn", "! " + w));
     box.append(card);
@@ -467,12 +473,22 @@ function vwap(rows) {
 }
 let chartData = null, chart = null, tf = "5m", gexTimer = null;
 
-async function openChart(r) {
-  const dlg = $("chartDlg");
+function stopGex() { if (gexTimer) { clearInterval(gexTimer); gexTimer = null; $("gexPlay").textContent = "Play"; } }
+function closeChart() { stopGex(); const d = $("chartDlg"); d.close ? d.close() : d.removeAttribute("open"); }
+function stepChart(d) { const i = chartIdx + d; if (i >= 0 && i < chartList.length) openChart(chartList[i], i); }
+function navState() {
+  const n = chartList.length; $("dlgNav").hidden = n < 2;
+  $("dlgCount").textContent = n ? `${chartIdx + 1} / ${n}` : "";
+  $("dlgPrev").disabled = chartIdx <= 0; $("dlgNext").disabled = chartIdx >= n - 1;
+}
+
+async function openChart(r, idx) {
+  const dlg = $("chartDlg"), seq = ++chartSeq;
+  stopGex(); chartIdx = idx ?? chartList.indexOf(r); navState();
   $("dlgTitle").textContent = r.ticker; $("dlgSub").textContent = `${r.grade} · ${r.setup} ${r.direction} · ${fmtDay(r.day)} ${r.trigger_time || ""}`;
   $("dlgResult").textContent = r.status ? "Result: " + r.status + (r.net_pct != null ? ` (net ${r.net_pct > 0 ? "+" : ""}${r.net_pct}%)` : "") : "";
   $("chartBox").replaceChildren(el("div", "empty", "Loading the chart…")); $("gexPanel").hidden = true;
-  if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+  if (!dlg.open) { if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", ""); }
   chartData = null;
   try {
     const { data, error } = await client.storage.from("charts").download(`${r.day}/${slugOf(r.id)}.json.gz`);
@@ -480,9 +496,10 @@ async function openChart(r) {
     let text;
     if (typeof DecompressionStream === "function") text = await new Response(data.stream().pipeThrough(new DecompressionStream("gzip"))).text();
     else throw new Error("This browser can't open the chart. Update your phone or try another browser.");
+    if (seq !== chartSeq) return;
     chartData = JSON.parse(text);
-  } catch (e) { $("chartBox").replaceChildren(el("div", "empty", e.message || String(e))); return; }
-  tf = chartData.charts["5m"] ? "5m" : Object.keys(chartData.charts)[0];
+  } catch (e) { if (seq === chartSeq) $("chartBox").replaceChildren(el("div", "empty", e.message || String(e))); return; }
+  if (!chartData.charts[tf]) tf = chartData.charts["5m"] ? "5m" : Object.keys(chartData.charts)[0];
   drawChart(); drawGexSetup();
 }
 
@@ -641,7 +658,15 @@ async function start() {
     gexTimer = setInterval(() => { if (+s.value >= +s.max) { clearInterval(gexTimer); gexTimer = null; $("gexPlay").textContent = "Play"; return; }
       s.value = +s.value + 1; drawGex(+s.value); }, 450);
   });
-  $("dlgClose").addEventListener("click", () => { if (gexTimer) { clearInterval(gexTimer); gexTimer = null; $("gexPlay").textContent = "Play"; } $("chartDlg").close ? $("chartDlg").close() : $("chartDlg").removeAttribute("open"); });
+  $("dlgClose").addEventListener("click", closeChart);
+  $("dlgPrev").addEventListener("click", () => stepChart(-1));
+  $("dlgNext").addEventListener("click", () => stepChart(1));
+  $("chartDlg").addEventListener("click", (e) => { if (e.target === $("chartDlg")) closeChart(); });
+  $("chartDlg").addEventListener("close", stopGex);
+  $("chartDlg").addEventListener("keydown", (e) => {
+    if (e.target.matches && e.target.matches("input[type=range]")) return;
+    if (e.key === "ArrowLeft") { e.preventDefault(); stepChart(-1); } else if (e.key === "ArrowRight") { e.preventDefault(); stepChart(1); }
+  });
   $("genPw").addEventListener("click", () => { $("invitePw").value = makePw(); });
   $("inviteForm").addEventListener("submit", async (e) => {
     e.preventDefault();
