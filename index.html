@@ -342,9 +342,10 @@ function makePw() {
 }
 
 async function setViewerPassword(email, password) {
-  const { data: sess } = await client.auth.getSession();   // send the signed-in token explicitly
-  const token = sess && sess.session ? sess.session.access_token : null;
-  if (!token) return { ok: false, msg: "You're not signed in on this page. Sign in again, then retry." };
+  // A fresh token for a live sign-in (an old one can point at a replaced session); sent explicitly.
+  const { data: ref, error: refErr } = await client.auth.refreshSession();
+  const token = !refErr && ref && ref.session ? ref.session.access_token : null;
+  if (!token) return { ok: false, msg: "Your sign-in on this page has expired. Tap Sign out, sign in again, then retry." };
   const { data, error } = await client.functions.invoke("set-viewer-password",
     { body: { email, password }, headers: { Authorization: "Bearer " + token } });
   if (!error) return { ok: true, how: data && data.how };
