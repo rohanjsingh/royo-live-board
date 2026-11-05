@@ -655,6 +655,8 @@ function drawChart() {
     const long = chartData.direction === "long", m = [];
     if (chartData.trigger && chartData.trigger.ts && at(chartData.trigger.ts)) m.push({ time: at(chartData.trigger.ts), position: long ? "belowBar" : "aboveBar",
       color: "#ffb347", shape: long ? "arrowUp" : "arrowDown", text: "entry " + (chartData.trigger.time || "") });
+    if (chartData.found && chartData.found.ts && at(chartData.found.ts)) m.push({ time: at(chartData.found.ts), position: long ? "belowBar" : "aboveBar",
+      color: "#9ec5ff", shape: "circle", text: "found " + (chartData.found.time || "") + " (late)" });   // LATE setups: graded from here
     if (chartData.trimHit && chartData.trimHit.ts && at(chartData.trimHit.ts)) m.push({ time: at(chartData.trimHit.ts), position: long ? "aboveBar" : "belowBar", color: "#3ddc97", shape: "circle", text: "trim" });
     if (chartData.exit && chartData.exit.ts && at(chartData.exit.ts)) m.push({ time: at(chartData.exit.ts), position: long ? "aboveBar" : "belowBar", color: "#c9ccd2", shape: "square", text: "out " + (chartData.exit.why || "") });
     m.sort((a, b) => a.time - b.time); candles.setMarkers(m);
