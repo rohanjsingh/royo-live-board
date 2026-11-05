@@ -117,6 +117,10 @@ dialog#chartDlg::backdrop { background: #000a; }
 .pos { color: var(--faint); font: 500 12px var(--mono); }
 .tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .tools .tab { padding: 4px 11px; font-size: 13px; }
+.sethead { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.sethead h3 { margin: 0; }
+.gradebar { display: flex; gap: 6px; flex-wrap: wrap; }
+.gradebar .tab { padding: 4px 12px; font-size: 13px; }
 .tools label { color: var(--muted); font-size: 13px; display: inline-flex; gap: 5px; align-items: center; margin-left: 6px; }
 #chartBox { height: 340px; min-width: 0; }
 .gexhead { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -188,7 +192,10 @@ dialog#chartDlg::backdrop { background: #000a; }
     <div class="tiles" id="tiles"></div>
     <div class="cols" style="margin-top:18px">
       <section>
-        <h3>Setups</h3>
+        <div class="sethead"><h3>Setups</h3>
+          <div class="gradebar" id="gradeBar" role="group" aria-label="Show grades">
+            <button class="tab" type="button" data-g="all">All</button><button class="tab" type="button" data-g="A+">A+</button><button class="tab" type="button" data-g="A">A</button><button class="tab" type="button" data-g="B">B</button>
+          </div></div>
         <div class="list" id="setups"></div>
       </section>
       <section>
@@ -272,6 +279,8 @@ const $ = (id) => document.getElementById(id);
 const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 const setups = new Map(), alerts = new Map();
 let client = null, channel = null, fresh = new Set();
+let gradePick = new Set();   // grade bubbles above the setups; empty = all
+try { gradePick = new Set(JSON.parse(localStorage.getItem("lb-grades") || "[]")); } catch (_) {}
 let viewDay = today, lastDay = null, sessions = [];   // today, or an earlier session that has setups (last 10)
 const FINAL = new Set(["win", "loss", "scratch", "ungraded"]);
 const fmtDay = (d) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" }).format(new Date(d + "T12:00:00Z"));
@@ -288,9 +297,14 @@ function render() {
     const rank = { open: 0, trimmed: 1, null: 2, undefined: 2, closed: 3 };
     return (rank[a.live_status] ?? 2) - (rank[b.live_status] ?? 2) || String(b.first_seen || b.trigger_time).localeCompare(String(a.first_seen || a.trigger_time));
   });
+  const allRows = rows.length;
+  if (gradePick.size) rows.splice(0, rows.length, ...rows.filter(r => gradePick.has(r.grade)));
+  for (const b of $("gradeBar").querySelectorAll(".tab")) b.setAttribute("aria-pressed", String(b.dataset.g === "all" ? !gradePick.size : gradePick.has(b.dataset.g)));
+  for (const b of $("gradeBar").querySelectorAll(".tab")) b.setAttribute("aria-selected", b.getAttribute("aria-pressed"));
   shown = rows;   // the order the cards are on screen: the chart's arrows follow it
   const box = $("setups"); box.replaceChildren();
-  if (!rows.length) box.append(el("div", "empty", viewDay === today
+  if (!rows.length && allRows) box.append(el("div", "empty", "No " + [...gradePick].join(" or ") + " setups " + (viewDay === today ? "yet today." : "that session.") + " Tap All to see the rest."));
+  else if (!rows.length) box.append(el("div", "empty", viewDay === today
     ? "No A+, A or B setups yet today. New ones appear here within about a minute." : "No A+, A or B setups that session."));
   for (const r of rows) {
     const card = el("article", "card" + (r.live_status === "closed" ? " closed" : "") + (fresh.has(r.id) ? " fresh" : ""));
@@ -311,7 +325,7 @@ function render() {
     box.append(card);
   }
   const t = $("tiles"); t.replaceChildren();
-  const count = (f) => rows.filter(f).length;
+  const every = [...setups.values()], count = (f) => every.filter(f).length;   // tiles always count the whole session
   const tiles = viewDay === today
     ? [["A+", count(r => r.grade === "A+")], ["A", count(r => r.grade === "A")], ["B", count(r => r.grade === "B")],
        ["Open", count(r => r.live_status === "open" || r.live_status === "trimmed")], ["Closed", count(r => r.live_status === "closed")]]
@@ -677,6 +691,13 @@ async function start() {
     if (!$("chartDlg").open || (e.target && e.target.matches && e.target.matches("input, textarea, select"))) return;
     if (e.key === "ArrowLeft") { e.preventDefault(); stepChart(-1); }
     if (e.key === "ArrowRight") { e.preventDefault(); stepChart(1); }
+  });
+  $("gradeBar").addEventListener("click", (e) => {
+    const g = e.target.closest && e.target.closest("[data-g]"); if (!g) return;
+    if (g.dataset.g === "all") gradePick.clear(); else if (gradePick.has(g.dataset.g)) gradePick.delete(g.dataset.g); else gradePick.add(g.dataset.g);
+    if (gradePick.size === 3) gradePick.clear();
+    try { localStorage.setItem("lb-grades", JSON.stringify([...gradePick])); } catch (_) {}
+    render();
   });
   $("genPw").addEventListener("click", () => { $("invitePw").value = makePw(); });
   $("inviteForm").addEventListener("submit", async (e) => {
