@@ -101,6 +101,23 @@ footer { color: var(--faint); font-size: 12px; }
 @media (prefers-reduced-motion: no-preference) { .card.fresh { animation: glow 2.4s ease-out; } }
 @keyframes glow { from { box-shadow: 0 0 0 2px var(--accent); } to { box-shadow: 0 0 0 0 transparent; } }
 [hidden] { display: none !important; }
+.chartbtn { justify-self: start; font-size: 13px; padding: 5px 12px; }
+dialog#chartDlg { width: min(980px, 100vw - 16px); max-height: calc(100dvh - 16px); padding: 0; border: 1px solid var(--line);
+  border-radius: 16px; background: var(--panel); color: var(--fg); }
+dialog#chartDlg::backdrop { background: #000a; }
+.dlg { display: grid; gap: 10px; padding: 14px 16px 16px; overflow-y: auto; max-height: calc(100dvh - 18px); }
+.dlghead { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.dlghead .tk { font-size: 22px; }
+.dlghead .close { margin-left: auto; }
+.tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.tools .tab { padding: 4px 11px; font-size: 13px; }
+.tools label { color: var(--muted); font-size: 13px; display: inline-flex; gap: 5px; align-items: center; margin-left: 6px; }
+#chartBox { height: 340px; min-width: 0; }
+.gexhead { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.gexhead input[type=range] { flex: 1 1 200px; accent-color: var(--accent); }
+#gexSvg { width: 100%; display: block; }
+.gexnote { color: var(--faint); font-size: 12px; }
+@media (max-width: 600px) { #chartBox { height: 280px; } dialog#chartDlg { width: 100vw; max-height: 100dvh; border-radius: 0; } }
 </style>
 </head>
 <body>
@@ -201,10 +218,39 @@ footer { color: var(--faint); font-size: 12px; }
     <p class="note" id="inviteMsg">Invited people sign in with the starter password you give them (then change it), or with an email link.</p>
   </section>
 
+  <dialog id="chartDlg" aria-labelledby="dlgTitle">
+    <div class="dlg">
+      <div class="dlghead">
+        <span class="tk" id="dlgTitle"></span><span class="setup" id="dlgSub"></span>
+        <button class="btn close" type="button" id="dlgClose">Close</button>
+      </div>
+      <div class="result" id="dlgResult"></div>
+      <div class="tools" id="tfTabs">
+        <button class="tab" data-tf="1m">1m</button><button class="tab" data-tf="5m">5m</button><button class="tab" data-tf="15m">15m</button>
+        <button class="tab" data-tf="1h">1h</button><button class="tab" data-tf="1d">1d</button>
+        <label><input type="checkbox" id="optEma" checked> EMA 9/21</label>
+        <label><input type="checkbox" id="optVwap" checked> VWAP</label>
+        <label><input type="checkbox" id="optFlow" checked> Flow</label>
+      </div>
+      <div id="chartBox"></div>
+      <div class="gexnote" id="chartNote">Lines: entry (gold), stop (red), trim (green), gamma levels (grey). Flow bars: net bullish (green) or bearish (red) option premium per 5 minutes.</div>
+      <section id="gexPanel">
+        <h3 style="margin:6px 0 8px">Gamma replay · net GEX by strike, 14 DTE</h3>
+        <div class="gexhead">
+          <button class="btn" type="button" id="gexPlay">Play</button>
+          <input type="range" id="gexSlider" min="0" max="0" value="0" aria-label="Time of day">
+          <span class="gexnote" id="gexTime"></span>
+        </div>
+        <svg id="gexSvg" role="img" aria-label="Net gamma by strike"></svg>
+      </section>
+    </div>
+  </dialog>
+
   <footer>Setups from royo's options-flow scanner, about a minute behind the market. Grades: A+ score 8+, A 7, B 6. A record of what the scanner saw, not financial advice.</footer>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 // Fill these two after creating the Supabase project (Project Settings -> API). The anon key is public by design:
 // what it can read is limited by the row-level security in liveboard/schema.sql (invited emails only).
@@ -247,6 +293,7 @@ function render() {
     if (r.net_pct != null) nums.append(cell("Net", (r.net_pct > 0 ? "+" : "") + num(r.net_pct) + "%", r.net_pct > 0 ? "pos" : r.net_pct < 0 ? "neg" : ""));
     card.append(top, nums);
     if (done && r.status) { const res = el("div", "result"); res.append(el("span", null, "Result"), document.createTextNode(r.status)); card.append(res); }
+    if (viewDay !== today) { const b = el("button", "btn chartbtn", "Chart"); b.type = "button"; b.addEventListener("click", () => openChart(r)); card.append(b); }
     if (r.trigger_summary) card.append(el("div", "why", r.trigger_summary));
     for (const w of r.warnings || []) card.append(el("div", "warn", "! " + w));
     box.append(card);
@@ -400,6 +447,126 @@ async function loadViewers() {
   }
 }
 
+// ---------- previous-session charts (private 'charts' bucket, one gzipped JSON per setup) ----------
+const slugOf = (id) => id.split("|").slice(1).filter(Boolean).join(" ").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+const etOffset = new Map();   // seconds to add to a UTC timestamp so the chart's clock reads Eastern time
+function etShift(ts) {
+  const day = Math.floor(ts / 86400);
+  if (!etOffset.has(day)) {
+    const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hourCycle: "h23", year: "numeric",
+      month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(ts * 1000)).map(x => [x.type, x.value]));
+    etOffset.set(day, (Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) / 1000) - ts);
+  }
+  return ts + etOffset.get(day);
+}
+function ema(vals, n) { const k = 2 / (n + 1); let e = null; return vals.map((v, i) => (e = e == null ? v : e + (v - e) * k, i >= n - 1 ? e : null)); }
+function vwap(rows) {
+  let day = null, pv = 0, vol = 0;
+  return rows.map(r => { const d = Math.floor(etShift(r[0]) / 86400); if (d !== day) { day = d; pv = 0; vol = 0; }
+    pv += (r[2] + r[3] + r[4]) / 3 * (r[5] || 0); vol += r[5] || 0; return vol ? pv / vol : null; });
+}
+let chartData = null, chart = null, tf = "5m", gexTimer = null;
+
+async function openChart(r) {
+  const dlg = $("chartDlg");
+  $("dlgTitle").textContent = r.ticker; $("dlgSub").textContent = `${r.grade} · ${r.setup} ${r.direction} · ${fmtDay(r.day)} ${r.trigger_time || ""}`;
+  $("dlgResult").textContent = r.status ? "Result: " + r.status + (r.net_pct != null ? ` (net ${r.net_pct > 0 ? "+" : ""}${r.net_pct}%)` : "") : "";
+  $("chartBox").replaceChildren(el("div", "empty", "Loading the chart…")); $("gexPanel").hidden = true;
+  if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+  chartData = null;
+  try {
+    const { data, error } = await client.storage.from("charts").download(`${r.day}/${slugOf(r.id)}.json.gz`);
+    if (error) throw new Error(/not.?found|400|404/i.test(error.message) ? "No chart was saved for this setup." : error.message);
+    let text;
+    if (typeof DecompressionStream === "function") text = await new Response(data.stream().pipeThrough(new DecompressionStream("gzip"))).text();
+    else throw new Error("This browser can't open the chart. Update your phone or try another browser.");
+    chartData = JSON.parse(text);
+  } catch (e) { $("chartBox").replaceChildren(el("div", "empty", e.message || String(e))); return; }
+  tf = chartData.charts["5m"] ? "5m" : Object.keys(chartData.charts)[0];
+  drawChart(); drawGexSetup();
+}
+
+function drawChart() {
+  const box = $("chartBox"); box.replaceChildren();
+  for (const b of $("tfTabs").querySelectorAll(".tab")) { b.setAttribute("aria-selected", String(b.dataset.tf === tf)); b.disabled = !chartData.charts[b.dataset.tf]; }
+  if (!window.LightweightCharts) { box.append(el("div", "empty", "The chart library didn't load. Check your connection and reopen.")); return; }
+  const css = getComputedStyle(document.documentElement);
+  if (chart) { chart.remove(); chart = null; }
+  chart = LightweightCharts.createChart(box, { autoSize: true,
+    layout: { background: { color: css.getPropertyValue("--panel").trim() }, textColor: css.getPropertyValue("--muted").trim(), fontFamily: "IBM Plex Mono, monospace" },
+    grid: { vertLines: { color: "#ffffff0a" }, horzLines: { color: "#ffffff0a" } }, rightPriceScale: { borderColor: "#ffffff14" },
+    timeScale: { borderColor: "#ffffff14", timeVisible: tf !== "1d", secondsVisible: false } });
+  const rows = chartData.charts[tf] || [];
+  const t = (ts) => tf === "1d" ? ts : etShift(ts);
+  const candles = chart.addCandlestickSeries({ upColor: "#3ddc97", downColor: "#ff6b6b", borderVisible: false, wickUpColor: "#3ddc97", wickDownColor: "#ff6b6b" });
+  candles.setData(rows.map(r => ({ time: t(r[0]), open: r[1], high: r[2], low: r[3], close: r[4] })));
+  const closes = rows.map(r => r[4]);
+  if ($("optEma").checked) for (const [n, col] of [[9, "#ffd166"], [21, "#9ec5ff"]]) {
+    const e = ema(closes, n); chart.addLineSeries({ color: col, lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+      .setData(rows.map((r, i) => e[i] == null ? null : { time: t(r[0]), value: e[i] }).filter(Boolean));
+  }
+  if ($("optVwap").checked && ["1m", "5m", "15m"].includes(tf)) {
+    const v = vwap(rows); chart.addLineSeries({ color: "#ff7a18", lineWidth: 2, lineStyle: 2, priceLineVisible: false, lastValueVisible: false })
+      .setData(rows.map((r, i) => v[i] == null ? null : { time: t(r[0]), value: v[i] }).filter(Boolean));
+  }
+  const line = (price, color, title, style = 0) => price && candles.createPriceLine({ price, color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title });
+  line(chartData.entry, "#ffd166", "entry"); line(chartData.stop, "#ff6b6b", "stop"); line(chartData.trim, "#3ddc97", "trim");
+  for (const l of chartData.levels || []) line(l.price, "#9aa0aa", l.label, 2);
+  if (tf !== "1d") {   // markers on the bar that contains each moment
+    const at = (ts) => { let best = null; for (const r of rows) if (r[0] <= ts) best = r[0]; return best == null ? null : t(best); };
+    const long = chartData.direction === "long", m = [];
+    if (chartData.trigger && chartData.trigger.ts && at(chartData.trigger.ts)) m.push({ time: at(chartData.trigger.ts), position: long ? "belowBar" : "aboveBar",
+      color: "#ffb347", shape: long ? "arrowUp" : "arrowDown", text: "entry " + (chartData.trigger.time || "") });
+    if (chartData.trimHit && chartData.trimHit.ts && at(chartData.trimHit.ts)) m.push({ time: at(chartData.trimHit.ts), position: long ? "aboveBar" : "belowBar", color: "#3ddc97", shape: "circle", text: "trim" });
+    if (chartData.exit && chartData.exit.ts && at(chartData.exit.ts)) m.push({ time: at(chartData.exit.ts), position: long ? "aboveBar" : "belowBar", color: "#c9ccd2", shape: "square", text: "out " + (chartData.exit.why || "") });
+    m.sort((a, b) => a.time - b.time); candles.setMarkers(m);
+    if ($("optFlow").checked && ["1m", "5m"].includes(tf) && (chartData.flowBars || []).length) {
+      const h = chart.addHistogramSeries({ priceScaleId: "flow", priceFormat: { type: "volume" }, priceLineVisible: false, lastValueVisible: false });
+      chart.priceScale("flow").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+      h.setData(chartData.flowBars.map(([b, bull, bear]) => ({ time: etShift(b), value: Math.abs(bull - bear), color: bull >= bear ? "#3ddc9799" : "#ff6b6b99" })));
+    }
+  }
+  const day = rows.filter(r => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date(r[0] * 1000)) === chartData.day);
+  if (["1m", "5m", "15m"].includes(tf) && day.length > 1) chart.timeScale().setVisibleRange({ from: t(day[0][0]), to: t(day[day.length - 1][0]) });
+  else chart.timeScale().fitContent();   // intraday frames open on the setup's own session; 1h/1d show the run-up
+}
+
+function drawGexSetup() {
+  const g = chartData.gex, frames = g && g.frames || [];
+  $("gexPanel").hidden = !frames.length;
+  if (!frames.length) return;
+  const s = $("gexSlider"); s.max = frames.length - 1;
+  const trig = chartData.trigger && chartData.trigger.ts;
+  let i0 = frames.length - 1;   // start at the snapshot nearest the entry
+  if (trig) i0 = frames.reduce((best, f, i) => Math.abs(f.ts - trig) < Math.abs(frames[best].ts - trig) ? i : best, 0);
+  s.value = i0; drawGex(i0);
+}
+
+function drawGex(i) {
+  const frames = chartData.gex.frames, f = frames[i], svg = $("gexSvg");
+  const max = Math.max(1, ...frames.flatMap(x => x.strikes.map(k => Math.abs(k[1]))));
+  const ks = [...f.strikes].sort((a, b) => b[0] - a[0]);
+  const near = ks.sort((a, b) => Math.abs(a[0] - f.spot) - Math.abs(b[0] - f.spot)).slice(0, 24).sort((a, b) => b[0] - a[0]);
+  const W = 640, row = 16, top = 6, mid = W / 2 + 30, half = W / 2 - 50, H = top * 2 + near.length * row;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const NS = "http://www.w3.org/2000/svg", mk = (tag, a, text) => { const n = document.createElementNS(NS, tag); for (const k in a) n.setAttribute(k, a[k]); if (text != null) n.textContent = text; return n; };
+  const parts = [mk("line", { x1: mid, x2: mid, y1: 0, y2: H, stroke: "#ffffff22" })];
+  const spotY = (() => { let best = 0; near.forEach((k, j) => { if (Math.abs(k[0] - f.spot) < Math.abs(near[best][0] - f.spot)) best = j; }); return top + best * row + row / 2; })();
+  near.forEach(([k, net], j) => {
+    const y = top + j * row, w = Math.max(1, Math.abs(net) / max * half), pos = net >= 0;
+    const isKing = f.king && f.king.strike === k, isFlip = f.flip === k;
+    parts.push(mk("text", { x: 4, y: y + 12, fill: isKing ? "#ffd166" : "#9aa0aa", "font-size": 11, "font-family": "IBM Plex Mono, monospace" }, k + (isKing ? " king" : isFlip ? " flip" : "")));
+    parts.push(mk("rect", { x: pos ? mid : mid - w, y: y + 2, width: w, height: row - 4, rx: 2, fill: pos ? "#3ddc97" : "#ff6b6b", "fill-opacity": isKing ? 1 : 0.75 }));
+    parts.push(mk("text", { x: pos ? mid + w + 4 : mid - w - 4, y: y + 12, "text-anchor": pos ? "start" : "end", fill: "#6b7280", "font-size": 10,
+      "font-family": "IBM Plex Mono, monospace" }, (net / 1e6).toFixed(1) + "M"));
+  });
+  parts.push(mk("line", { x1: 60, x2: W - 4, y1: spotY, y2: spotY, stroke: "#ffb347", "stroke-dasharray": "4 3" }));
+  parts.push(mk("text", { x: W - 4, y: spotY - 3, "text-anchor": "end", fill: "#ffb347", "font-size": 10, "font-family": "IBM Plex Mono, monospace" }, "spot " + f.spot));
+  svg.replaceChildren(...parts);
+  const tm = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }).format(new Date(f.ts * 1000));
+  $("gexTime").textContent = `${tm} ET · spot ${f.spot}` + (f.flip ? ` · flip ${f.flip}` : "") + (f.king ? ` · king ${f.king.strike}` : "");
+}
+
 function leave() {
   if (channel) { client.removeChannel(channel); channel = null; }
   $("board").hidden = true; $("notInvited").hidden = true; $("signin").hidden = false; $("admin").hidden = true;
@@ -410,8 +577,18 @@ async function start() {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !window.supabase) { $("setupNote").hidden = false; return; }
   client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });   // stays signed in on this browser
   let entered = false;
+  const clearLocal = async () => {
+    try { await client.auth.signOut({ scope: "local" }); } catch (_) {}
+    try { Object.keys(localStorage).filter((k) => k.startsWith("sb-")).forEach((k) => localStorage.removeItem(k)); } catch (_) {}
+  };
   const { data } = await client.auth.getSession();
-  if (data.session) { entered = true; enter(data.session); } else leave();
+  let live = data.session;
+  if (live) {   // a saved sign-in the server dropped (e.g. after a password change) is cleared, not left half-working
+    const { data: ref, error } = await client.auth.refreshSession();
+    if (error || !ref || !ref.session) { await clearLocal(); live = null; $("formMsg").textContent = "Your sign-in expired. Please sign in again."; }
+    else live = ref.session;
+  }
+  if (live) { entered = true; enter(live); } else leave();
   client.auth.onAuthStateChange((evt, session) => {
     if (evt === "PASSWORD_RECOVERY") { $("pwPanel").hidden = false; $("pwMsg").textContent = "Choose your new password."; }
     if (evt === "SIGNED_IN" && session && !entered) { entered = true; enter(session); }
@@ -447,10 +624,24 @@ async function start() {
     $("pwMsg").textContent = error ? "Couldn't save: " + error.message : "Saved. Next time, sign in with your email and this password.";
     if (!error) { $("newPw").value = ""; setTimeout(() => { $("pwPanel").hidden = true; }, 2500); }
   });
-  $("signout").addEventListener("click", () => client.auth.signOut());
+  $("signout").addEventListener("click", async () => {   // always signs out here, even if the server no longer knows the session
+    await clearLocal();
+    entered = false; leave();
+  });
   $("tabToday").addEventListener("click", () => load(today));
   $("tabLast").addEventListener("click", () => lastDay && load(lastDay));
   $("pick").addEventListener("change", (e) => e.target.value && load(e.target.value));
+  for (const b of $("tfTabs").querySelectorAll(".tab")) b.addEventListener("click", () => { tf = b.dataset.tf; if (chartData) drawChart(); });
+  for (const id of ["optEma", "optVwap", "optFlow"]) $(id).addEventListener("change", () => chartData && drawChart());
+  $("gexSlider").addEventListener("input", (e) => chartData && drawGex(+e.target.value));
+  $("gexPlay").addEventListener("click", () => {
+    if (gexTimer) { clearInterval(gexTimer); gexTimer = null; $("gexPlay").textContent = "Play"; return; }
+    const s = $("gexSlider"); if (+s.value >= +s.max) s.value = 0;
+    $("gexPlay").textContent = "Pause";
+    gexTimer = setInterval(() => { if (+s.value >= +s.max) { clearInterval(gexTimer); gexTimer = null; $("gexPlay").textContent = "Play"; return; }
+      s.value = +s.value + 1; drawGex(+s.value); }, 450);
+  });
+  $("dlgClose").addEventListener("click", () => { if (gexTimer) { clearInterval(gexTimer); gexTimer = null; $("gexPlay").textContent = "Play"; } $("chartDlg").close ? $("chartDlg").close() : $("chartDlg").removeAttribute("open"); });
   $("genPw").addEventListener("click", () => { $("invitePw").value = makePw(); });
   $("inviteForm").addEventListener("submit", async (e) => {
     e.preventDefault();
