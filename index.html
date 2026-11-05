@@ -72,7 +72,7 @@ h3 { margin: 0 0 10px; font-size: 12px; letter-spacing: .14em; text-transform: u
 .feed .item:last-child { border-bottom: 0; }
 .meta { display: flex; gap: 8px; align-items: center; font: 500 12px var(--mono); color: var(--faint); }
 .kind { padding: 1px 7px; border-radius: 6px; border: 1px solid var(--line); text-transform: uppercase; letter-spacing: .06em; }
-.kind.setup { color: var(--accent-b); } .kind.watch { color: #9ec5ff; } .kind.monitor { color: var(--up); }
+.kind.setup { color: var(--accent-b); } .kind.watch { color: #9ec5ff; } .kind.monitor { color: var(--up); } .kind.extended { color: var(--muted); border-style: dashed; }
 .ttl { font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
 .bd { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .empty { color: var(--muted); font-size: 14px; padding: 6px 2px; }
@@ -363,7 +363,7 @@ function render() {
   renderTabs();
   for (const a of items.slice(0, 80)) {
     const it = el("div", "item"), meta = el("div", "meta");
-    meta.append(el("span", null, a.at + " ET"), el("span", "kind " + a.kind, a.kind));
+    meta.append(el("span", null, a.at + " ET"), el("span", "kind " + a.kind, a.kind === "extended" ? "extended · look only" : a.kind));
     it.append(meta, el("div", "ttl", a.title));
     if (a.body) it.append(el("div", "bd", a.body));
     feed.append(it);
