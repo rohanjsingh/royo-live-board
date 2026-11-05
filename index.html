@@ -342,7 +342,11 @@ function makePw() {
 }
 
 async function setViewerPassword(email, password) {
-  const { data, error } = await client.functions.invoke("set-viewer-password", { body: { email, password } });
+  const { data: sess } = await client.auth.getSession();   // send the signed-in token explicitly
+  const token = sess && sess.session ? sess.session.access_token : null;
+  if (!token) return { ok: false, msg: "You're not signed in on this page. Sign in again, then retry." };
+  const { data, error } = await client.functions.invoke("set-viewer-password",
+    { body: { email, password }, headers: { Authorization: "Bearer " + token } });
   if (!error) return { ok: true, how: data && data.how };
   let msg = error.message;
   try { const b = await error.context.json(); if (b && b.error) msg = b.error; } catch (_) {}
