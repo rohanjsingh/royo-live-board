@@ -76,7 +76,25 @@ h3 { margin: 0 0 10px; font-size: 12px; letter-spacing: .14em; text-transform: u
 .ttl { font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
 .bd { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .empty { color: var(--muted); font-size: 14px; padding: 6px 2px; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.tab { background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: 14px; }
+.tab[aria-selected="true"] { color: #1a1206; background: linear-gradient(90deg, var(--accent-a), var(--accent)); border-color: transparent; font-weight: 700; }
+.tab:disabled { opacity: .45; cursor: default; }
+.viewnote { color: var(--muted); font-size: 13px; flex-basis: 100%; }
+.pick { background: var(--panel-2); color: var(--fg); border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; font-size: 14px; }
+.pill.win { color: var(--up); border-color: #3ddc9755; }
+.pill.loss { color: var(--down); border-color: #ff6b6b55; }
+.pill.scratch, .pill.ungraded { color: var(--muted); }
+.result { font-size: 14px; color: var(--fg); }
+.result span { color: var(--faint); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin-right: 6px; }
 footer { color: var(--faint); font-size: 12px; }
+.admin { display: grid; gap: 12px; }
+.admin table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.admin th { text-align: left; color: var(--faint); font-weight: 600; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding: 6px 8px; }
+.admin td { padding: 8px; border-top: 1px solid var(--line); font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+.admin td:first-child { font-family: var(--display); font-size: 14px; white-space: nowrap; min-width: 13em; }
+.scroll { overflow-x: auto; }
+.linkbtn { background: none; border: 0; color: var(--down); cursor: pointer; padding: 0; font: inherit; font-size: 13px; }
 @media (prefers-reduced-motion: no-preference) { .card.fresh { animation: glow 2.4s ease-out; } }
 @keyframes glow { from { box-shadow: 0 0 0 2px var(--accent); } to { box-shadow: 0 0 0 0 transparent; } }
 [hidden] { display: none !important; }
@@ -116,6 +134,13 @@ footer { color: var(--faint); font-size: 12px; }
   </section>
 
   <main id="board" hidden>
+    <div class="tabs" role="tablist" style="margin-bottom:12px">
+      <button class="tab" role="tab" id="tabToday" aria-selected="true">Today</button>
+      <button class="tab" role="tab" id="tabLast" aria-selected="false" disabled>Previous session</button>
+      <label for="pick" hidden>Session</label>
+      <select class="pick" id="pick" hidden></select>
+      <span class="viewnote" id="viewNote"></span>
+    </div>
     <div class="tiles" id="tiles"></div>
     <div class="cols" style="margin-top:18px">
       <section>
@@ -128,6 +153,20 @@ footer { color: var(--faint); font-size: 12px; }
       </section>
     </div>
   </main>
+
+  <section class="panel admin" id="admin" hidden>
+    <h3 style="margin:0">Viewers · only you see this</h3>
+    <div class="scroll"><table>
+      <thead><tr><th>Email</th><th>Invited</th><th>Joined</th><th>Last sign-in</th><th></th></tr></thead>
+      <tbody id="viewerRows"></tbody>
+    </table></div>
+    <form class="row" id="inviteForm">
+      <label for="inviteEmail" hidden>Email to invite</label>
+      <input id="inviteEmail" type="email" required placeholder="colleague@example.com">
+      <button class="btn primary" type="submit">Invite</button>
+    </form>
+    <p class="note" id="inviteMsg">Invited people open this page, enter their email and tap the link we email them. Nobody else can see the board.</p>
+  </section>
 
   <footer>Setups from royo's options-flow scanner, about a minute behind the market. Grades: A+ score 8+, A 7, B 6. A record of what the scanner saw, not financial advice.</footer>
 </div>
@@ -143,6 +182,9 @@ const $ = (id) => document.getElementById(id);
 const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 const setups = new Map(), alerts = new Map();
 let client = null, channel = null, fresh = new Set();
+let viewDay = today, lastDay = null, sessions = [];   // today, or an earlier session that has setups (last 10)
+const FINAL = new Set(["win", "loss", "scratch", "ungraded"]);
+const fmtDay = (d) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" }).format(new Date(d + "T12:00:00Z"));
 
 $("day").textContent = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", month: "short", day: "numeric" })
   .format(new Date()) + " · A+, A and B setups";
@@ -157,31 +199,39 @@ function render() {
     return (rank[a.live_status] ?? 2) - (rank[b.live_status] ?? 2) || String(b.first_seen || b.trigger_time).localeCompare(String(a.first_seen || a.trigger_time));
   });
   const box = $("setups"); box.replaceChildren();
-  if (!rows.length) box.append(el("div", "empty", "No A+, A or B setups yet today. New ones appear here within about a minute."));
+  if (!rows.length) box.append(el("div", "empty", viewDay === today
+    ? "No A+, A or B setups yet today. New ones appear here within about a minute." : "No A+, A or B setups that session."));
   for (const r of rows) {
     const card = el("article", "card" + (r.live_status === "closed" ? " closed" : "") + (fresh.has(r.id) ? " fresh" : ""));
     const top = el("div", "top");
     top.append(el("span", "grade g-" + (r.grade === "A+" ? "Aplus" : r.grade), r.grade), el("span", "tk", r.ticker),
       el("span", "dir " + r.direction, r.direction === "long" ? "▲ long" : "▼ short"), el("span", "setup", r.setup + " · " + (r.trigger_time || "")));
-    top.append(el("span", "pill " + (r.live_status || ""), r.live_status || r.status || "found"));
+    const done = FINAL.has(r.live_status);
+    top.append(el("span", "pill " + (r.live_status || ""), done ? r.live_status : (r.live_status || r.status || "found")));
     const nums = el("div", "nums");
     const cell = (k, v, cls) => { const d = el("div", cls); d.append(el("span", null, k), document.createTextNode(v)); return d; };
     nums.append(cell("Entry", num(r.entry)), cell("Stop", num(r.stop)), cell("Trim", num(r.trim)));
     if (r.net_pct != null) nums.append(cell("Net", (r.net_pct > 0 ? "+" : "") + num(r.net_pct) + "%", r.net_pct > 0 ? "pos" : r.net_pct < 0 ? "neg" : ""));
     card.append(top, nums);
+    if (done && r.status) { const res = el("div", "result"); res.append(el("span", null, "Result"), document.createTextNode(r.status)); card.append(res); }
     if (r.trigger_summary) card.append(el("div", "why", r.trigger_summary));
     for (const w of r.warnings || []) card.append(el("div", "warn", "! " + w));
     box.append(card);
   }
   const t = $("tiles"); t.replaceChildren();
   const count = (f) => rows.filter(f).length;
-  for (const [k, v] of [["A+", count(r => r.grade === "A+")], ["A", count(r => r.grade === "A")], ["B", count(r => r.grade === "B")],
-                        ["Open", count(r => r.live_status === "open" || r.live_status === "trimmed")], ["Closed", count(r => r.live_status === "closed")]]) {
+  const tiles = viewDay === today
+    ? [["A+", count(r => r.grade === "A+")], ["A", count(r => r.grade === "A")], ["B", count(r => r.grade === "B")],
+       ["Open", count(r => r.live_status === "open" || r.live_status === "trimmed")], ["Closed", count(r => r.live_status === "closed")]]
+    : [["A+", count(r => r.grade === "A+")], ["A", count(r => r.grade === "A")], ["B", count(r => r.grade === "B")],
+       ["Wins", count(r => r.live_status === "win")], ["Losses", count(r => r.live_status === "loss")], ["Scratch", count(r => r.live_status === "scratch")]];
+  for (const [k, v] of tiles) {
     const d = el("div", "tile"); d.append(el("b", null, String(v)), el("span", null, k)); t.append(d);
   }
   const feed = $("feed"); feed.replaceChildren();
   const items = [...alerts.values()].sort((a, b) => String(b.at).localeCompare(String(a.at)) || String(b.created_at).localeCompare(String(a.created_at)));
-  if (!items.length) feed.append(el("div", "empty", "No alerts yet today."));
+  if (!items.length) feed.append(el("div", "empty", viewDay === today ? "No alerts yet today." : "No alerts that session."));
+  renderTabs();
   for (const a of items.slice(0, 80)) {
     const it = el("div", "item"), meta = el("div", "meta");
     meta.append(el("span", null, a.at + " ET"), el("span", "kind " + a.kind, a.kind));
@@ -191,10 +241,32 @@ function render() {
   }
 }
 
-async function load() {
+function renderTabs() {
+  $("tabToday").setAttribute("aria-selected", String(viewDay === today));
+  $("tabLast").setAttribute("aria-selected", String(viewDay !== today));
+  $("tabLast").disabled = !lastDay;
+  $("tabLast").textContent = lastDay ? "Previous session · " + fmtDay(lastDay) : "Previous session";
+  const pick = $("pick");
+  pick.hidden = sessions.length < 2;
+  if (pick.options.length !== sessions.length + 1) {
+    pick.replaceChildren(new Option("Earlier sessions…", ""), ...sessions.map(d => new Option(fmtDay(d), d)));
+  }
+  pick.value = viewDay !== today && viewDay !== lastDay ? viewDay : "";
+  $("viewNote").textContent = viewDay !== today
+    ? "Showing " + fmtDay(viewDay) + " with final results. Today's setups appear from 9:31 ET and the board switches to them on its own." : "";
+}
+
+async function findSessions() {
+  const r = await client.from("setups").select("day").lt("day", today).order("day", { ascending: false }).limit(1000);
+  sessions = r.error ? [] : [...new Set(r.data.map(x => x.day))].slice(0, 10);
+  return sessions[0] || null;
+}
+
+async function load(day = viewDay) {
+  viewDay = day;
   const [s, a] = await Promise.all([
-    client.from("setups").select("*").eq("day", today),
-    client.from("alerts").select("*").eq("day", today).order("at", { ascending: false }).limit(200),
+    client.from("setups").select("*").eq("day", day),
+    client.from("alerts").select("*").eq("day", day).order("at", { ascending: false }).limit(200),
   ]);
   if (s.error || a.error) { setConn("wait", "Can't load: " + (s.error || a.error).message); return; }
   setups.clear(); alerts.clear();
@@ -207,10 +279,11 @@ function subscribe() {
   if (channel) client.removeChannel(channel);
   channel = client.channel("board")
     .on("postgres_changes", { event: "*", schema: "public", table: "setups", filter: "day=eq." + today }, (p) => {
+      if (viewDay !== today) { if (p.eventType !== "DELETE") { fresh.add(p.new.id); load(today); } return; }   // first setup of the day: switch to Today
       if (p.eventType === "DELETE") setups.delete(p.old.id); else { if (!setups.has(p.new.id)) fresh.add(p.new.id); setups.set(p.new.id, p.new); }
       render();
     })
-    .on("postgres_changes", { event: "INSERT", schema: "public", table: "alerts", filter: "day=eq." + today }, (p) => { alerts.set(p.new.id, p.new); render(); })
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "alerts", filter: "day=eq." + today }, (p) => { if (viewDay === today) { alerts.set(p.new.id, p.new); render(); } })
     .subscribe((status) => setConn(status === "SUBSCRIBED" ? "live" : "wait", status === "SUBSCRIBED" ? "Live" : "Reconnecting…"));
 }
 
@@ -220,12 +293,43 @@ async function enter(session) {
   const me = await client.from("viewers").select("email").limit(1);
   if (me.error || !me.data.length) { $("notInvited").hidden = false; $("board").hidden = true; setConn("", "Not invited"); return; }
   $("notInvited").hidden = true; $("board").hidden = false;
-  await load(); subscribe();
+  lastDay = await findSessions();
+  await load(today);
+  if (!setups.size && lastDay) await load(lastDay);   // nothing yet today: show the last session
+  subscribe();
+  loadViewers();
+}
+
+const when = (t) => t ? new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(t)) : "not yet";
+
+async function loadViewers() {
+  const r = await client.rpc("viewer_status");
+  if (r.error) { $("admin").hidden = true; return; }   // not an admin (or the add-on SQL isn't installed)
+  $("admin").hidden = false;
+  const me = ($("who").textContent || "").toLowerCase();
+  const body = $("viewerRows"); body.replaceChildren();
+  for (const v of r.data) {
+    const tr = el("tr");
+    tr.append(el("td", null, v.email), el("td", null, when(v.invited_at)), el("td", null, when(v.joined_at)), el("td", null, when(v.last_sign_in_at)));
+    const td = el("td");
+    if (v.email.toLowerCase() !== me) {
+      const b = el("button", "linkbtn", "Remove");
+      b.type = "button";
+      b.addEventListener("click", async () => {
+        if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "Tap again to remove"; return; }
+        const d = await client.from("viewers").delete().eq("email", v.email);
+        $("inviteMsg").textContent = d.error ? "Couldn't remove: " + d.error.message : "Removed " + v.email + ".";
+        loadViewers();
+      });
+      td.append(b);
+    }
+    tr.append(td); body.append(tr);
+  }
 }
 
 function leave() {
   if (channel) { client.removeChannel(channel); channel = null; }
-  $("board").hidden = true; $("notInvited").hidden = true; $("signin").hidden = false;
+  $("board").hidden = true; $("notInvited").hidden = true; $("signin").hidden = false; $("admin").hidden = true;
   $("who").hidden = true; $("signout").hidden = true; setConn("", "Signed out");
 }
 
@@ -243,7 +347,20 @@ async function start() {
     $("send").disabled = false;
   });
   $("signout").addEventListener("click", () => client.auth.signOut());
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && channel) load(); });   // catch up after the phone sleeps
+  $("tabToday").addEventListener("click", () => load(today));
+  $("tabLast").addEventListener("click", () => lastDay && load(lastDay));
+  $("pick").addEventListener("change", (e) => e.target.value && load(e.target.value));
+  $("inviteForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = $("inviteEmail").value.trim().toLowerCase();
+    const r = await client.from("viewers").insert({ email });
+    $("inviteMsg").textContent = r.error
+      ? (r.error.code === "23505" ? email + " is already invited." : "Couldn't invite: " + r.error.message)
+      : "Invited " + email + ". Send them this page's address; they sign in with that email.";
+    if (!r.error) $("inviteEmail").value = "";
+    loadViewers();
+  });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && channel) load(); });   // reloads the day on view   // catch up after the phone sleeps
   setInterval(() => { if (channel && !document.hidden) load(); }, 5 * 60 * 1000);
 }
 start();
