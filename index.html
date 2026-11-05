@@ -293,10 +293,8 @@ function num(v) { return v == null || v === "" ? "–" : Number(v).toLocaleStrin
 function setConn(state, text) { $("dot").className = "dot " + state; $("connText").textContent = text; }
 
 function render() {
-  const rows = [...setups.values()].sort((a, b) => {
-    const rank = { open: 0, trimmed: 1, null: 2, undefined: 2, closed: 3 };
-    return (rank[a.live_status] ?? 2) - (rank[b.live_status] ?? 2) || String(b.first_seen || b.trigger_time).localeCompare(String(a.first_seen || a.trigger_time));
-  });
+  const when = (r) => String(r.trigger_time || r.first_seen || "");   // the time the setup came out
+  const rows = [...setups.values()].sort((a, b) => when(b).localeCompare(when(a)) || String(b.first_seen || "").localeCompare(String(a.first_seen || "")));   // newest first
   const allRows = rows.length;
   if (gradePick.size) rows.splice(0, rows.length, ...rows.filter(r => gradePick.has(r.grade)));
   for (const b of $("gradeBar").querySelectorAll(".tab")) b.setAttribute("aria-pressed", String(b.dataset.g === "all" ? !gradePick.size : gradePick.has(b.dataset.g)));
