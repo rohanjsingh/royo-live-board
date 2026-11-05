@@ -108,11 +108,13 @@ dialog#chartDlg::backdrop { background: #000a; }
 .dlg { display: grid; gap: 10px; padding: 14px 16px 16px; overflow-y: auto; max-height: calc(100dvh - 18px); }
 .dlghead { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .dlghead .tk { font-size: 22px; }
-.dlghead .close { margin-left: auto; }
-.dlgnav { display: inline-flex; gap: 6px; align-items: center; }
-.dlgnav .btn, .dlghead .close { width: 34px; height: 34px; padding: 0; display: inline-grid; place-items: center; font-size: 18px; line-height: 1; border-radius: 10px; }
-.dlgnav .btn:disabled { opacity: .35; cursor: default; }
-.dlgnav .count { color: var(--muted); font-size: 13px; min-width: 44px; text-align: center; }
+.dlghead .navs { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.iconbtn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: var(--fg);
+  font-size: 20px; line-height: 1; cursor: pointer; display: inline-grid; place-items: center; padding: 0; }
+.iconbtn:disabled { opacity: .35; cursor: default; }
+.iconbtn.x { background: transparent; border-color: transparent; font-size: 24px; color: var(--muted); }
+.iconbtn:focus-visible { outline: 2px solid var(--accent-b); outline-offset: 2px; }
+.pos { color: var(--faint); font: 500 12px var(--mono); }
 .tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .tools .tab { padding: 4px 11px; font-size: 13px; }
 .tools label { color: var(--muted); font-size: 13px; display: inline-flex; gap: 5px; align-items: center; margin-left: 6px; }
@@ -226,8 +228,12 @@ dialog#chartDlg::backdrop { background: #000a; }
     <div class="dlg">
       <div class="dlghead">
         <span class="tk" id="dlgTitle"></span><span class="setup" id="dlgSub"></span>
-        <span class="dlgnav" id="dlgNav"><button class="btn" type="button" id="dlgPrev" aria-label="Previous setup">‹</button><span class="count" id="dlgCount"></span><button class="btn" type="button" id="dlgNext" aria-label="Next setup">›</button></span>
-        <button class="btn close" type="button" id="dlgClose" aria-label="Close">✕</button>
+        <span class="navs">
+          <button class="iconbtn" type="button" id="dlgPrev" aria-label="Previous setup">‹</button>
+          <span class="pos" id="dlgPos"></span>
+          <button class="iconbtn" type="button" id="dlgNext" aria-label="Next setup">›</button>
+          <button class="iconbtn x" type="button" id="dlgClose" aria-label="Close">×</button>
+        </span>
       </div>
       <div class="result" id="dlgResult"></div>
       <div class="tools" id="tfTabs">
@@ -266,7 +272,6 @@ const $ = (id) => document.getElementById(id);
 const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 const setups = new Map(), alerts = new Map();
 let client = null, channel = null, fresh = new Set();
-let chartList = [], chartIdx = -1, chartSeq = 0;   // chart window: setups in the order shown, for the ‹ › arrows
 let viewDay = today, lastDay = null, sessions = [];   // today, or an earlier session that has setups (last 10)
 const FINAL = new Set(["win", "loss", "scratch", "ungraded"]);
 const fmtDay = (d) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" }).format(new Date(d + "T12:00:00Z"));
@@ -283,7 +288,8 @@ function render() {
     const rank = { open: 0, trimmed: 1, null: 2, undefined: 2, closed: 3 };
     return (rank[a.live_status] ?? 2) - (rank[b.live_status] ?? 2) || String(b.first_seen || b.trigger_time).localeCompare(String(a.first_seen || a.trigger_time));
   });
-  const box = $("setups"); box.replaceChildren(); chartList = viewDay !== today ? rows : [];
+  shown = rows;   // the order the cards are on screen: the chart's arrows follow it
+  const box = $("setups"); box.replaceChildren();
   if (!rows.length) box.append(el("div", "empty", viewDay === today
     ? "No A+, A or B setups yet today. New ones appear here within about a minute." : "No A+, A or B setups that session."));
   for (const r of rows) {
@@ -299,7 +305,7 @@ function render() {
     if (r.net_pct != null) nums.append(cell("Net", (r.net_pct > 0 ? "+" : "") + num(r.net_pct) + "%", r.net_pct > 0 ? "pos" : r.net_pct < 0 ? "neg" : ""));
     card.append(top, nums);
     if (done && r.status) { const res = el("div", "result"); res.append(el("span", null, "Result"), document.createTextNode(r.status)); card.append(res); }
-    if (viewDay !== today) { const b = el("button", "btn chartbtn", "Chart"); b.type = "button"; b.addEventListener("click", () => openChart(r, rows.indexOf(r))); card.append(b); }
+    if (viewDay !== today) { const b = el("button", "btn chartbtn", "Chart"); b.type = "button"; b.addEventListener("click", () => openChart(r)); card.append(b); }
     if (r.trigger_summary) card.append(el("div", "why", r.trigger_summary));
     for (const w of r.warnings || []) card.append(el("div", "warn", "! " + w));
     box.append(card);
@@ -471,20 +477,24 @@ function vwap(rows) {
   return rows.map(r => { const d = Math.floor(etShift(r[0]) / 86400); if (d !== day) { day = d; pv = 0; vol = 0; }
     pv += (r[2] + r[3] + r[4]) / 3 * (r[5] || 0); vol += r[5] || 0; return vol ? pv / vol : null; });
 }
-let chartData = null, chart = null, tf = "5m", gexTimer = null;
+let chartData = null, chart = null, tf = "5m", gexTimer = null, shown = [], chartIdx = -1, chartSeq = 0;
 
-function stopGex() { if (gexTimer) { clearInterval(gexTimer); gexTimer = null; $("gexPlay").textContent = "Play"; } }
-function closeChart() { stopGex(); const d = $("chartDlg"); d.close ? d.close() : d.removeAttribute("open"); }
-function stepChart(d) { const i = chartIdx + d; if (i >= 0 && i < chartList.length) openChart(chartList[i], i); }
-function navState() {
-  const n = chartList.length; $("dlgNav").hidden = n < 2;
-  $("dlgCount").textContent = n ? `${chartIdx + 1} / ${n}` : "";
-  $("dlgPrev").disabled = chartIdx <= 0; $("dlgNext").disabled = chartIdx >= n - 1;
+function stepChart(d) {
+  const i = chartIdx + d;
+  if (i >= 0 && i < shown.length) openChart(shown[i]);
 }
 
-async function openChart(r, idx) {
+function closeChart() {
+  if (gexTimer) { clearInterval(gexTimer); gexTimer = null; $("gexPlay").textContent = "Play"; }
+  const dlg = $("chartDlg"); if (dlg.open) { if (dlg.close) dlg.close(); else dlg.removeAttribute("open"); }
+}
+
+async function openChart(r) {
   const dlg = $("chartDlg"), seq = ++chartSeq;
-  stopGex(); chartIdx = idx ?? chartList.indexOf(r); navState();
+  if (gexTimer) { clearInterval(gexTimer); gexTimer = null; $("gexPlay").textContent = "Play"; }
+  chartIdx = shown.findIndex(x => x.id === r.id);
+  $("dlgPrev").disabled = chartIdx <= 0; $("dlgNext").disabled = chartIdx < 0 || chartIdx >= shown.length - 1;
+  $("dlgPos").textContent = chartIdx >= 0 ? `${chartIdx + 1} / ${shown.length}` : "";
   $("dlgTitle").textContent = r.ticker; $("dlgSub").textContent = `${r.grade} · ${r.setup} ${r.direction} · ${fmtDay(r.day)} ${r.trigger_time || ""}`;
   $("dlgResult").textContent = r.status ? "Result: " + r.status + (r.net_pct != null ? ` (net ${r.net_pct > 0 ? "+" : ""}${r.net_pct}%)` : "") : "";
   $("chartBox").replaceChildren(el("div", "empty", "Loading the chart…")); $("gexPanel").hidden = true;
@@ -496,10 +506,10 @@ async function openChart(r, idx) {
     let text;
     if (typeof DecompressionStream === "function") text = await new Response(data.stream().pipeThrough(new DecompressionStream("gzip"))).text();
     else throw new Error("This browser can't open the chart. Update your phone or try another browser.");
-    if (seq !== chartSeq) return;
+    if (seq !== chartSeq) return;   // the viewer already moved to another setup
     chartData = JSON.parse(text);
   } catch (e) { if (seq === chartSeq) $("chartBox").replaceChildren(el("div", "empty", e.message || String(e))); return; }
-  if (!chartData.charts[tf]) tf = chartData.charts["5m"] ? "5m" : Object.keys(chartData.charts)[0];
+  tf = chartData.charts["5m"] ? "5m" : Object.keys(chartData.charts)[0];
   drawChart(); drawGexSetup();
 }
 
@@ -661,11 +671,12 @@ async function start() {
   $("dlgClose").addEventListener("click", closeChart);
   $("dlgPrev").addEventListener("click", () => stepChart(-1));
   $("dlgNext").addEventListener("click", () => stepChart(1));
-  $("chartDlg").addEventListener("click", (e) => { if (e.target === $("chartDlg")) closeChart(); });
-  $("chartDlg").addEventListener("close", stopGex);
-  $("chartDlg").addEventListener("keydown", (e) => {
-    if (e.target.matches && e.target.matches("input[type=range]")) return;
-    if (e.key === "ArrowLeft") { e.preventDefault(); stepChart(-1); } else if (e.key === "ArrowRight") { e.preventDefault(); stepChart(1); }
+  $("chartDlg").addEventListener("click", (e) => { if (e.target === $("chartDlg")) closeChart(); });   // a tap on the backdrop
+  $("chartDlg").addEventListener("close", () => { if (gexTimer) { clearInterval(gexTimer); gexTimer = null; $("gexPlay").textContent = "Play"; } });
+  document.addEventListener("keydown", (e) => {
+    if (!$("chartDlg").open || (e.target && e.target.matches && e.target.matches("input, textarea, select"))) return;
+    if (e.key === "ArrowLeft") { e.preventDefault(); stepChart(-1); }
+    if (e.key === "ArrowRight") { e.preventDefault(); stepChart(1); }
   });
   $("genPw").addEventListener("click", () => { $("invitePw").value = makePw(); });
   $("inviteForm").addEventListener("submit", async (e) => {
