@@ -131,6 +131,16 @@ dialog#chartDlg::backdrop { background: #000a; }
 .gexhead { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .gexhead input[type=range] { flex: 1 1 200px; accent-color: var(--accent); }
 #gexSvg { width: 100%; display: block; }
+.optpanel { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; }
+.optpanel .oph { display: flex; gap: 8px 12px; align-items: baseline; flex-wrap: wrap; }
+.optpanel .oph b { font: 700 15px var(--mono); }
+.optpanel .oph .st { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+.optpanel .oph .at { color: var(--faint); font-size: 12px; margin-left: auto; }
+.optgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 6px 14px; font: 500 14px var(--mono); }
+.optgrid span { display: block; color: var(--faint); font: 11px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+.optgrid small { display: block; color: var(--faint); font-size: 11px; }
+#optSvg { width: 100%; height: 90px; display: block; }
+.result .livetag { color: var(--up); font: 600 12px var(--mono); letter-spacing: 0; text-transform: none; margin-left: 0; }
 .gexnote { color: var(--faint); font-size: 12px; }
 @media (max-width: 600px) { #chartBox { height: 280px; } dialog#chartDlg { width: calc(100vw - 16px); max-height: calc(100dvh - 48px); border-radius: 14px; } .dlg { max-height: calc(100dvh - 50px); } }
 </style>
@@ -248,6 +258,7 @@ dialog#chartDlg::backdrop { background: #000a; }
         </span>
       </div>
       <div class="result" id="dlgResult"></div>
+      <section class="optpanel" id="optPanel" hidden aria-label="Bot's option"></section>
       <div class="tools" id="tfTabs">
         <button class="tab" data-tf="1m">1m</button><button class="tab" data-tf="5m">5m</button><button class="tab" data-tf="15m">15m</button>
         <button class="tab" data-tf="1h">1h</button><button class="tab" data-tf="1d">1d</button>
@@ -331,7 +342,7 @@ function render() {
       card.append(o);
     }
     if (done && r.status) { const res = el("div", "result"); res.append(el("span", null, "Result"), document.createTextNode(r.status)); card.append(res); }
-    if (viewDay !== today) { const b = el("button", "btn chartbtn", "Chart"); b.type = "button"; b.addEventListener("click", () => openChart(r)); card.append(b); }
+    { const b = el("button", "btn chartbtn", viewDay === today ? "Live chart" : "Chart"); b.type = "button"; b.addEventListener("click", () => openChart(r)); card.append(b); }
     if (r.trigger_summary) card.append(el("div", "why", r.trigger_summary));
     for (const w of r.warnings || []) card.append(el("div", "warn", "! " + w));
     box.append(card);
@@ -503,7 +514,7 @@ function vwap(rows) {
   return rows.map(r => { const d = Math.floor(etShift(r[0]) / 86400); if (d !== day) { day = d; pv = 0; vol = 0; }
     pv += (r[2] + r[3] + r[4]) / 3 * (r[5] || 0); vol += r[5] || 0; return vol ? pv / vol : null; });
 }
-let chartData = null, chart = null, tf = "5m", gexTimer = null, shown = [], chartIdx = -1, chartSeq = 0;
+let chartData = null, chart = null, tf = "5m", gexTimer = null, shown = [], chartIdx = -1, chartSeq = 0, chartRow = null, liveTimer = null;
 
 function stepChart(d) {
   const i = chartIdx + d;
@@ -511,31 +522,105 @@ function stepChart(d) {
 }
 
 function closeChart() {
+  if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (gexTimer) { clearInterval(gexTimer); gexTimer = null; $("gexPlay").textContent = "Play"; }
   const dlg = $("chartDlg"); if (dlg.open) { if (dlg.close) dlg.close(); else dlg.removeAttribute("open"); }
+}
+
+async function fetchChart(r) {
+  const path = `${r.day}/${slugOf(r.id)}.json.gz`;
+  let data, error;
+  if (r.day === today) {   // live files change every 5 minutes: fetch past any cached copy
+    const sig = await client.storage.from("charts").createSignedUrl(path, 120);
+    error = sig.error;
+    if (!error) { const res = await fetch(sig.data.signedUrl, { cache: "no-store" }); if (res.ok) data = await res.blob(); else error = { message: String(res.status) }; }
+  } else ({ data, error } = await client.storage.from("charts").download(path));
+  if (error) {
+    const missing = /not.?found|400|404/i.test(error.message);
+    throw new Error(missing ? (r.day === today ? "The live chart for this setup isn't saved yet. It's saved within about 5 minutes of the alert, then every 5 minutes." : "No chart was saved for this setup.") : error.message);
+  }
+  if (typeof DecompressionStream !== "function") throw new Error("This browser can't open the chart. Update your phone or try another browser.");
+  return JSON.parse(await new Response(data.stream().pipeThrough(new DecompressionStream("gzip"))).text());
+}
+
+function etTime(epoch) { return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }).format(new Date(epoch * 1000)); }
+
+function drawOption() {   // the bot's alert-entry contract: from the chart file when it has it, else the board row
+  const box = $("optPanel"), r = setups.get(chartRow && chartRow.id) || chartRow || {};
+  const o = (chartData && chartData.option) || (r.opt_contract ? { contract: r.opt_contract, entry: r.opt_entry, now: r.opt_now,
+    now_at: r.opt_at ? Date.parse(r.opt_at) / 1000 : null, state: r.opt_state } : null);
+  box.replaceChildren(); box.hidden = !o;
+  if (!o) return;
+  const pct = (v) => o.entry && v != null ? (v / o.entry - 1) * 100 : null;
+  const pctTxt = (v) => { const p = pct(v); return p == null ? "" : (p > 0 ? "+" : "") + p.toFixed(1) + "%"; };
+  const cls = (v) => { const p = pct(v); return p > 0 ? "pos" : p < 0 ? "neg" : ""; };
+  const h = el("div", "oph");
+  h.append(el("span", "st", "Bot's option"), el("b", null, o.contract), el("span", "st", o.state || ""));
+  if (o.now_at) h.append(el("span", "at", "quote " + etTime(o.now_at) + " ET · ~15 min delayed"));
+  const g = el("div", "optgrid");
+  const cell = (k, v, sub, c) => { const d = el("div", c || ""); d.append(el("span", null, k), document.createTextNode(v)); if (sub) d.append(el("small", null, sub)); return d; };
+  g.append(cell("Entry", "$" + prem(o.entry), o.entry_at ? etTime(o.entry_at) : ""));
+  g.append(cell(o.state === "closed" ? "Exit" : "Now", "$" + prem(o.now), pctTxt(o.now), cls(o.now)));
+  if (o.best != null) g.append(cell("Best", "$" + prem(o.best), pctTxt(o.best) + (o.best_at ? " · " + etTime(o.best_at) : ""), cls(o.best)));
+  if (o.worst != null) g.append(cell("Worst", "$" + prem(o.worst), pctTxt(o.worst) + (o.worst_at ? " · " + etTime(o.worst_at) : ""), cls(o.worst)));
+  if (o.trim) g.append(cell("Trimmed", "$" + prem(o.trim.price), pctTxt(o.trim.price) + (o.trim.at ? " · " + etTime(o.trim.at) : ""), cls(o.trim.price)));
+  if (o.exit) g.append(cell("Out", "$" + prem(o.exit.price), (o.exit.why || "") + (o.exit.at ? " · " + etTime(o.exit.at) : ""), cls(o.exit.price)));
+  box.append(h, g);
+  const pts = (o.series || []).filter(p => p && p[1] != null);
+  if (pts.length > 1) {   // premium path since entry, with the entry price as a dashed line
+    const NS = "http://www.w3.org/2000/svg", W = 600, H = 90, pad = 4;
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]).concat([o.entry]);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const X = (x) => pad + (x - x0) / ((x1 - x0) || 1) * (W - 2 * pad), Y = (y) => H - pad - (y - y0) / ((y1 - y0) || 1) * (H - 2 * pad);
+    const svg = document.createElementNS(NS, "svg"); svg.id = "optSvg"; svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("preserveAspectRatio", "none");
+    svg.setAttribute("role", "img"); svg.setAttribute("aria-label", "Option price since entry");
+    const ln = document.createElementNS(NS, "line"); ln.setAttribute("x1", 0); ln.setAttribute("x2", W); ln.setAttribute("y1", Y(o.entry)); ln.setAttribute("y2", Y(o.entry));
+    ln.setAttribute("stroke", "#ffd166"); ln.setAttribute("stroke-dasharray", "4 4"); ln.setAttribute("vector-effect", "non-scaling-stroke");
+    const pl = document.createElementNS(NS, "polyline"); pl.setAttribute("points", pts.map(p => X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1)).join(" "));
+    pl.setAttribute("fill", "none"); pl.setAttribute("stroke", (o.now ?? o.entry) >= o.entry ? "#3ddc97" : "#ff6b6b"); pl.setAttribute("stroke-width", "2"); pl.setAttribute("vector-effect", "non-scaling-stroke");
+    svg.append(ln, pl); box.append(svg);
+  }
+}
+
+function setHeader(r) {
+  $("dlgTitle").textContent = r.ticker; $("dlgSub").textContent = `${r.grade} · ${r.setup} ${r.direction} · ${fmtDay(r.day)} ${r.trigger_time || ""}`;
+  const res = $("dlgResult"); res.replaceChildren();
+  if (r.status) res.append(document.createTextNode("Result: " + r.status + (r.net_pct != null ? ` (net ${r.net_pct > 0 ? "+" : ""}${r.net_pct}%)` : "")));
+  if (r.day === today) res.append(el("span", "livetag", "● Live" + (chartData && chartData.updated ? " · chart as of " + etTime(chartData.updated) + " ET" : "")));
+}
+
+async function refreshLive() {   // today's setup: pick up the Mac's 5-minute chart uploads without losing the viewer's place
+  const r = chartRow, seq = chartSeq;
+  if (!r || !$("chartDlg").open) return;
+  let next; try { next = await fetchChart(r); } catch (_) { drawOption(); setHeader(setups.get(r.id) || r); return; }
+  if (seq !== chartSeq) return;
+  const changed = !chartData || next.updated !== chartData.updated;
+  const range = chart && chart.timeScale().getVisibleLogicalRange();
+  const s = $("gexSlider"), atEnd = +s.value >= +s.max, gi = +s.value;
+  chartData = next; setHeader(setups.get(r.id) || r); drawOption();
+  if (!changed) return;
+  if (!chartData.charts[tf]) tf = chartData.charts["5m"] ? "5m" : Object.keys(chartData.charts)[0];
+  drawChart(); if (range && chart) chart.timeScale().setVisibleLogicalRange(range);
+  if (!gexTimer) { drawGexSetup(); const f = (chartData.gex && chartData.gex.frames) || []; if (f.length) { const i = atEnd ? f.length - 1 : Math.min(gi, f.length - 1); s.value = i; drawGex(i); } }
 }
 
 async function openChart(r) {
   const dlg = $("chartDlg"), seq = ++chartSeq;
   if (gexTimer) { clearInterval(gexTimer); gexTimer = null; $("gexPlay").textContent = "Play"; }
-  chartIdx = shown.findIndex(x => x.id === r.id);
+  if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+  chartIdx = shown.findIndex(x => x.id === r.id); chartRow = r; chartData = null;
   $("dlgPrev").disabled = chartIdx <= 0; $("dlgNext").disabled = chartIdx < 0 || chartIdx >= shown.length - 1;
   $("dlgPos").textContent = chartIdx >= 0 ? `${chartIdx + 1} / ${shown.length}` : "";
-  $("dlgTitle").textContent = r.ticker; $("dlgSub").textContent = `${r.grade} · ${r.setup} ${r.direction} · ${fmtDay(r.day)} ${r.trigger_time || ""}`;
-  $("dlgResult").textContent = r.status ? "Result: " + r.status + (r.net_pct != null ? ` (net ${r.net_pct > 0 ? "+" : ""}${r.net_pct}%)` : "") : "";
+  setHeader(r); drawOption();
   $("chartBox").replaceChildren(el("div", "empty", "Loading the chart…")); $("gexPanel").hidden = true;
   if (!dlg.open) { if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", ""); }
-  chartData = null;
-  try {
-    const { data, error } = await client.storage.from("charts").download(`${r.day}/${slugOf(r.id)}.json.gz`);
-    if (error) throw new Error(/not.?found|400|404/i.test(error.message) ? "No chart was saved for this setup." : error.message);
-    let text;
-    if (typeof DecompressionStream === "function") text = await new Response(data.stream().pipeThrough(new DecompressionStream("gzip"))).text();
-    else throw new Error("This browser can't open the chart. Update your phone or try another browser.");
-    if (seq !== chartSeq) return;   // the viewer already moved to another setup
-    chartData = JSON.parse(text);
-  } catch (e) { if (seq === chartSeq) $("chartBox").replaceChildren(el("div", "empty", e.message || String(e))); return; }
-  tf = chartData.charts["5m"] ? "5m" : Object.keys(chartData.charts)[0];
+  if (r.day === today) liveTimer = setInterval(refreshLive, 60 * 1000);
+  let data;
+  try { data = await fetchChart(r); }
+  catch (e) { if (seq === chartSeq) $("chartBox").replaceChildren(el("div", "empty", e.message || String(e))); return; }
+  if (seq !== chartSeq) return;   // the viewer already moved to another setup
+  chartData = data; setHeader(r); drawOption();
+  if (!chartData.charts[tf]) tf = chartData.charts["5m"] ? "5m" : Object.keys(chartData.charts)[0];
   drawChart(); drawGexSetup();
 }
 
@@ -698,7 +783,7 @@ async function start() {
   $("dlgPrev").addEventListener("click", () => stepChart(-1));
   $("dlgNext").addEventListener("click", () => stepChart(1));
   $("chartDlg").addEventListener("click", (e) => { if (e.target === $("chartDlg")) closeChart(); });   // a tap on the backdrop
-  $("chartDlg").addEventListener("close", () => { if (gexTimer) { clearInterval(gexTimer); gexTimer = null; $("gexPlay").textContent = "Play"; } });
+  $("chartDlg").addEventListener("close", () => { if (liveTimer) { clearInterval(liveTimer); liveTimer = null; } if (gexTimer) { clearInterval(gexTimer); gexTimer = null; $("gexPlay").textContent = "Play"; } });
   document.addEventListener("keydown", (e) => {
     if (!$("chartDlg").open || (e.target && e.target.matches && e.target.matches("input, textarea, select"))) return;
     if (e.key === "ArrowLeft") { e.preventDefault(); stepChart(-1); }
