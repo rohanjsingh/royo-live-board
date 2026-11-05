@@ -95,6 +95,9 @@ footer { color: var(--faint); font-size: 12px; }
 .admin td:first-child { font-family: var(--display); font-size: 14px; white-space: nowrap; min-width: 13em; }
 .scroll { overflow-x: auto; }
 .linkbtn { background: none; border: 0; color: var(--down); cursor: pointer; padding: 0; font: inherit; font-size: 13px; }
+.linkbtn.alt { color: var(--accent-b); font-size: 14px; }
+.stack { display: grid; gap: 8px; }
+.stack input { background: var(--panel-2); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; min-width: 0; }
 @media (prefers-reduced-motion: no-preference) { .card.fresh { animation: glow 2.4s ease-out; } }
 @keyframes glow { from { box-shadow: 0 0 0 2px var(--accent); } to { box-shadow: 0 0 0 0 transparent; } }
 [hidden] { display: none !important; }
@@ -108,6 +111,7 @@ footer { color: var(--faint); font-size: 12px; }
     <div class="right">
       <span id="conn"><span class="dot" id="dot"></span><span id="connText">Offline</span></span>
       <span id="who" hidden></span>
+      <button class="btn" id="pwBtn" hidden>Set password</button>
       <button class="btn" id="signout" hidden>Sign out</button>
     </div>
   </header>
@@ -119,13 +123,30 @@ footer { color: var(--faint); font-size: 12px; }
 
   <section class="panel signin" id="signin" hidden>
     <h2>Sign in</h2>
-    <p>Enter your email and we'll send you a sign-in link. Only invited emails can see the board.</p>
-    <form class="row" id="form">
+    <p>Only invited emails can see the board. Once you're in, this browser stays signed in.</p>
+    <form class="stack" id="form">
       <label for="email" hidden>Email</label>
       <input id="email" type="email" required autocomplete="email" placeholder="you@example.com">
-      <button class="btn primary" type="submit" id="send">Email me a link</button>
+      <label for="password" hidden>Password</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="Password">
+      <button class="btn primary" type="submit" id="send">Sign in</button>
     </form>
-    <p class="note" id="formMsg"></p>
+    <div class="row">
+      <button class="linkbtn alt" type="button" id="sendLink">Email me a sign-in link instead</button>
+      <button class="linkbtn alt" type="button" id="forgot">Forgot password?</button>
+    </div>
+    <p class="note" id="formMsg">First time here, or no password yet? Use the email link, then set a password from the menu.</p>
+  </section>
+
+  <section class="panel signin" id="pwPanel" hidden>
+    <h2>Set a password</h2>
+    <p>Then you can sign in with your email and this password, without waiting for an email.</p>
+    <form class="stack" id="pwForm">
+      <label for="newPw" hidden>New password</label>
+      <input id="newPw" type="password" required minlength="8" autocomplete="new-password" placeholder="New password (8+ characters)">
+      <div class="row"><button class="btn primary" type="submit">Save password</button><button class="btn" type="button" id="pwCancel">Cancel</button></div>
+    </form>
+    <p class="note" id="pwMsg"></p>
   </section>
 
   <section class="panel signin" id="notInvited" hidden>
@@ -289,7 +310,7 @@ function subscribe() {
 
 async function enter(session) {
   $("signin").hidden = true;
-  $("who").hidden = false; $("who").textContent = session.user.email; $("signout").hidden = false;
+  $("who").hidden = false; $("who").textContent = session.user.email; $("signout").hidden = false; $("pwBtn").hidden = false;
   const me = await client.from("viewers").select("email").limit(1);
   if (me.error || !me.data.length) { $("notInvited").hidden = false; $("board").hidden = true; setConn("", "Not invited"); return; }
   $("notInvited").hidden = true; $("board").hidden = false;
@@ -330,21 +351,49 @@ async function loadViewers() {
 function leave() {
   if (channel) { client.removeChannel(channel); channel = null; }
   $("board").hidden = true; $("notInvited").hidden = true; $("signin").hidden = false; $("admin").hidden = true;
-  $("who").hidden = true; $("signout").hidden = true; setConn("", "Signed out");
+  $("who").hidden = true; $("signout").hidden = true; $("pwBtn").hidden = true; $("pwPanel").hidden = true; setConn("", "Signed out");
 }
 
 async function start() {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !window.supabase) { $("setupNote").hidden = false; return; }
-  client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, detectSessionInUrl: true } });
+  client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });   // stays signed in on this browser
+  let entered = false;
   const { data } = await client.auth.getSession();
-  if (data.session) enter(data.session); else leave();
-  client.auth.onAuthStateChange((evt, session) => { if (evt === "SIGNED_IN" && session) enter(session); if (evt === "SIGNED_OUT") leave(); });
+  if (data.session) { entered = true; enter(data.session); } else leave();
+  client.auth.onAuthStateChange((evt, session) => {
+    if (evt === "PASSWORD_RECOVERY") { $("pwPanel").hidden = false; $("pwMsg").textContent = "Choose your new password."; }
+    if (evt === "SIGNED_IN" && session && !entered) { entered = true; enter(session); }
+    if (evt === "SIGNED_OUT") { entered = false; leave(); }
+  });
+  const here = location.origin + location.pathname;
+  const emailOf = () => $("email").value.trim();
+  const limitMsg = (m) => /rate limit/i.test(m) ? "Too many emails were sent in the last hour. Sign in with your password, or try the link again later." : m;
   $("form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    $("send").disabled = true; $("formMsg").textContent = "Sending…";
-    const { error } = await client.auth.signInWithOtp({ email: $("email").value.trim(), options: { emailRedirectTo: location.origin + location.pathname, shouldCreateUser: true } });
-    $("formMsg").textContent = error ? "Couldn't send the link: " + error.message : "Check your email for the sign-in link.";
+    if (!$("password").value) { $("formMsg").textContent = "Enter your password, or use the email link."; return; }
+    $("send").disabled = true; $("formMsg").textContent = "Signing in…";
+    const { error } = await client.auth.signInWithPassword({ email: emailOf(), password: $("password").value });
+    $("formMsg").textContent = error ? (/invalid/i.test(error.message) ? "Wrong email or password. No password yet? Use the email link once, then set one." : error.message) : "";
     $("send").disabled = false;
+  });
+  $("sendLink").addEventListener("click", async () => {
+    if (!emailOf()) { $("formMsg").textContent = "Enter your email first."; return; }
+    $("formMsg").textContent = "Sending…";
+    const { error } = await client.auth.signInWithOtp({ email: emailOf(), options: { emailRedirectTo: here, shouldCreateUser: true } });
+    $("formMsg").textContent = error ? "Couldn't send the link: " + limitMsg(error.message) : "Check your email for the sign-in link (open it on this device).";
+  });
+  $("forgot").addEventListener("click", async () => {
+    if (!emailOf()) { $("formMsg").textContent = "Enter your email first."; return; }
+    const { error } = await client.auth.resetPasswordForEmail(emailOf(), { redirectTo: here });
+    $("formMsg").textContent = error ? "Couldn't send the reset email: " + limitMsg(error.message) : "Check your email for a link to set a new password.";
+  });
+  $("pwBtn").addEventListener("click", () => { $("pwPanel").hidden = !$("pwPanel").hidden; $("pwMsg").textContent = ""; });
+  $("pwCancel").addEventListener("click", () => { $("pwPanel").hidden = true; });
+  $("pwForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const { error } = await client.auth.updateUser({ password: $("newPw").value });
+    $("pwMsg").textContent = error ? "Couldn't save: " + error.message : "Saved. Next time, sign in with your email and this password.";
+    if (!error) { $("newPw").value = ""; setTimeout(() => { $("pwPanel").hidden = true; }, 2500); }
   });
   $("signout").addEventListener("click", () => client.auth.signOut());
   $("tabToday").addEventListener("click", () => load(today));
