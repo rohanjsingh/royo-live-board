@@ -181,12 +181,24 @@ footer { color: var(--faint); font-size: 12px; }
       <thead><tr><th>Email</th><th>Invited</th><th>Joined</th><th>Last sign-in</th><th></th></tr></thead>
       <tbody id="viewerRows"></tbody>
     </table></div>
-    <form class="row" id="inviteForm">
+    <form class="stack" id="inviteForm">
       <label for="inviteEmail" hidden>Email to invite</label>
-      <input id="inviteEmail" type="email" required placeholder="colleague@example.com">
-      <button class="btn primary" type="submit">Invite</button>
+      <input id="inviteEmail" type="email" required placeholder="friend@example.com">
+      <div class="row">
+        <label for="invitePw" hidden>Starter password</label>
+        <input id="invitePw" type="text" autocomplete="off" spellcheck="false" placeholder="Starter password (optional, 8+)">
+        <button class="btn" type="button" id="genPw">Make one</button>
+      </div>
+      <div class="row">
+        <button class="btn primary" type="submit" id="inviteBtn">Invite</button>
+        <span class="note">With a starter password they can sign in right away, no email needed.</span>
+      </div>
     </form>
-    <p class="note" id="inviteMsg">Invited people open this page, enter their email and tap the link we email them. Nobody else can see the board.</p>
+    <div class="row" id="pwShow" hidden>
+      <span class="note" id="pwShowText"></span>
+      <button class="btn" type="button" id="pwCopy">Copy</button>
+    </div>
+    <p class="note" id="inviteMsg">Invited people sign in with the starter password you give them (then change it), or with an email link.</p>
   </section>
 
   <footer>Setups from royo's options-flow scanner, about a minute behind the market. Grades: A+ score 8+, A 7, B 6. A record of what the scanner saw, not financial advice.</footer>
@@ -323,6 +335,29 @@ async function enter(session) {
 
 const when = (t) => t ? new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(t)) : "not yet";
 
+function makePw() {
+  const abc = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const r = crypto.getRandomValues(new Uint32Array(12));
+  return Array.from(r, (n) => abc[n % abc.length]).join("");
+}
+
+async function setViewerPassword(email, password) {
+  const { data, error } = await client.functions.invoke("set-viewer-password", { body: { email, password } });
+  if (!error) return { ok: true, how: data && data.how };
+  let msg = error.message;
+  try { const b = await error.context.json(); if (b && b.error) msg = b.error; } catch (_) {}
+  if (/not found|Failed to send/i.test(msg)) msg = "The set-viewer-password function isn't installed in Supabase yet.";
+  return { ok: false, msg };
+}
+
+function showPw(email, pw) {   // shown once, so it can be copied and texted to them
+  $("pwShow").hidden = false;
+  $("pwShowText").textContent = "Starter password for " + email + ": " + pw;
+  $("pwCopy").onclick = async () => {
+    try { await navigator.clipboard.writeText(pw); $("pwCopy").textContent = "Copied"; } catch (_) { $("pwCopy").textContent = "Select and copy it"; }
+  };
+}
+
 async function loadViewers() {
   const r = await client.rpc("viewer_status");
   if (r.error) { $("admin").hidden = true; return; }   // not an admin (or the add-on SQL isn't installed)
@@ -333,6 +368,18 @@ async function loadViewers() {
     const tr = el("tr");
     tr.append(el("td", null, v.email), el("td", null, when(v.invited_at)), el("td", null, when(v.joined_at)), el("td", null, when(v.last_sign_in_at)));
     const td = el("td");
+    const reset = el("button", "linkbtn alt", "Reset password");
+    reset.type = "button";
+    reset.addEventListener("click", async () => {
+      if (reset.dataset.armed !== "1") { reset.dataset.armed = "1"; reset.textContent = "Tap again: new starter password"; return; }
+      const pw = makePw();
+      reset.disabled = true; reset.textContent = "Setting…";
+      const r = await setViewerPassword(v.email, pw);
+      reset.disabled = false; reset.dataset.armed = ""; reset.textContent = "Reset password";
+      if (r.ok) { showPw(v.email, pw); $("inviteMsg").textContent = "New starter password set for " + v.email + ". Send it to them privately."; }
+      else $("inviteMsg").textContent = "Couldn't set it: " + r.msg;
+    });
+    td.append(reset, document.createTextNode("  "));
     if (v.email.toLowerCase() !== me) {
       const b = el("button", "linkbtn", "Remove");
       b.type = "button";
@@ -399,14 +446,27 @@ async function start() {
   $("tabToday").addEventListener("click", () => load(today));
   $("tabLast").addEventListener("click", () => lastDay && load(lastDay));
   $("pick").addEventListener("change", (e) => e.target.value && load(e.target.value));
+  $("genPw").addEventListener("click", () => { $("invitePw").value = makePw(); });
   $("inviteForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const email = $("inviteEmail").value.trim().toLowerCase();
-    const r = await client.from("viewers").insert({ email });
-    $("inviteMsg").textContent = r.error
-      ? (r.error.code === "23505" ? email + " is already invited." : "Couldn't invite: " + r.error.message)
-      : "Invited " + email + ". Send them this page's address; they sign in with that email.";
-    if (!r.error) $("inviteEmail").value = "";
+    const pw = $("invitePw").value;
+    $("pwShow").hidden = true;
+    if (pw && pw.length < 8) { $("inviteMsg").textContent = "The starter password needs at least 8 characters."; return; }
+    $("inviteBtn").disabled = true; $("inviteMsg").textContent = pw ? "Inviting and setting the password…" : "Inviting…";
+    if (pw) {
+      const r = await setViewerPassword(email, pw);   // also adds them to the invite list
+      $("inviteMsg").textContent = r.ok ? "Invited " + email + " with a starter password. Send them the board address and the password privately; they can change it with Set password."
+                                        : "Couldn't set the password: " + r.msg;
+      if (r.ok) { showPw(email, pw); $("inviteEmail").value = ""; $("invitePw").value = ""; }
+    } else {
+      const r = await client.from("viewers").insert({ email });
+      $("inviteMsg").textContent = r.error
+        ? (r.error.code === "23505" ? email + " is already invited." : "Couldn't invite: " + r.error.message)
+        : "Invited " + email + ". They sign in with an email link, or add a starter password with Reset password.";
+      if (!r.error) $("inviteEmail").value = "";
+    }
+    $("inviteBtn").disabled = false;
     loadViewers();
   });
   document.addEventListener("visibilitychange", () => { if (!document.hidden && channel) load(); });   // reloads the day on view   // catch up after the phone sleeps
