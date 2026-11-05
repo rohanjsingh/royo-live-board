@@ -86,6 +86,11 @@ h3 { margin: 0 0 10px; font-size: 12px; letter-spacing: .14em; text-transform: u
 .pill.loss { color: var(--down); border-color: #ff6b6b55; }
 .pill.scratch, .pill.ungraded { color: var(--muted); }
 .result { font-size: 14px; color: var(--fg); }
+.opt { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font: 500 13px var(--mono); border-top: 1px dashed var(--line); padding-top: 8px; }
+.opt .lbl { color: var(--faint); font: 11px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+.opt .ct { color: var(--fg); font-weight: 700; }
+.opt .pct { font-weight: 700; }
+.opt .at { color: var(--faint); font-size: 11px; margin-left: auto; }
 .result span { color: var(--faint); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin-right: 6px; }
 footer { color: var(--faint); font-size: 12px; }
 .admin { display: grid; gap: 12px; }
@@ -114,7 +119,7 @@ dialog#chartDlg::backdrop { background: #000a; }
 .iconbtn:disabled { opacity: .35; cursor: default; }
 .iconbtn.x { background: transparent; border-color: transparent; font-size: 24px; color: var(--muted); }
 .iconbtn:focus-visible { outline: 2px solid var(--accent-b); outline-offset: 2px; }
-.pos { color: var(--faint); font: 500 12px var(--mono); }
+.dlgpos { color: var(--faint); font: 500 12px var(--mono); }
 .tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .tools .tab { padding: 4px 11px; font-size: 13px; }
 .sethead { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
@@ -237,7 +242,7 @@ dialog#chartDlg::backdrop { background: #000a; }
         <span class="tk" id="dlgTitle"></span><span class="setup" id="dlgSub"></span>
         <span class="navs">
           <button class="iconbtn" type="button" id="dlgPrev" aria-label="Previous setup">‹</button>
-          <span class="pos" id="dlgPos"></span>
+          <span class="dlgpos" id="dlgPos"></span>
           <button class="iconbtn" type="button" id="dlgNext" aria-label="Next setup">›</button>
           <button class="iconbtn x" type="button" id="dlgClose" aria-label="Close">×</button>
         </span>
@@ -289,6 +294,7 @@ $("day").textContent = new Intl.DateTimeFormat("en-US", { timeZone: "America/New
   .format(new Date()) + " · A+, A and B setups";
 
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function prem(v) { return v == null || v === "" ? "–" : Number(v).toFixed(2); }
 function num(v) { return v == null || v === "" ? "–" : Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 }); }
 function setConn(state, text) { $("dot").className = "dot " + state; $("connText").textContent = text; }
 
@@ -316,6 +322,14 @@ function render() {
     nums.append(cell("Entry", num(r.entry)), cell("Stop", num(r.stop)), cell("Trim", num(r.trim)));
     if (r.net_pct != null) nums.append(cell("Net", (r.net_pct > 0 ? "+" : "") + num(r.net_pct) + "%", r.net_pct > 0 ? "pos" : r.net_pct < 0 ? "neg" : ""));
     card.append(top, nums);
+    if (r.opt_contract) {   // the paper trader's contract for the alert entry, refreshed every 15 min
+      const o = el("div", "opt"), pct = r.opt_pct;
+      o.append(el("span", "lbl", r.opt_state === "closed" ? "Option · closed" : r.opt_state === "trimmed" ? "Option · trimmed" : "Option"), el("span", "ct", r.opt_contract),
+        el("span", null, "$" + prem(r.opt_entry) + " → $" + prem(r.opt_now)));
+      if (pct != null) o.append(el("span", "pct " + (pct > 0 ? "pos" : pct < 0 ? "neg" : ""), (pct > 0 ? "+" : "") + num(pct) + "%"));
+      if (r.opt_at) o.append(el("span", "at", new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }).format(new Date(r.opt_at)) + " ET"));
+      card.append(o);
+    }
     if (done && r.status) { const res = el("div", "result"); res.append(el("span", null, "Result"), document.createTextNode(r.status)); card.append(res); }
     if (viewDay !== today) { const b = el("button", "btn chartbtn", "Chart"); b.type = "button"; b.addEventListener("click", () => openChart(r)); card.append(b); }
     if (r.trigger_summary) card.append(el("div", "why", r.trigger_summary));
