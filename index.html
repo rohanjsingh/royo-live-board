@@ -60,6 +60,9 @@ h3 { margin: 0 0 10px; font-size: 12px; letter-spacing: .14em; text-transform: u
 .dir.long { color: var(--up); } .dir.short { color: var(--down); }
 .setup { color: var(--muted); font-size: 14px; }
 .pill { margin-left: auto; font: 600 12px var(--mono); padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.watchtag { font: 11px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--faint);
+  border: 1px dashed var(--line); border-radius: 999px; padding: 2px 8px; }
+.gradenote { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
 .pill.open { color: var(--accent-b); border-color: #ffd16655; }
 .pill.trimmed { color: var(--up); border-color: #3ddc9755; }
 .pill.closed { color: var(--muted); }
@@ -91,6 +94,10 @@ h3 { margin: 0 0 10px; font-size: 12px; letter-spacing: .14em; text-transform: u
 .opt .ct { color: var(--fg); font-weight: 700; }
 .opt .pct { font-weight: 700; }
 .opt .at { color: var(--faint); font-size: 11px; margin-left: auto; }
+.optsw { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; justify-self: start; }
+.optsw button { font: 11px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 4px 10px; background: none;
+  color: var(--muted); border: 0; cursor: pointer; }
+.optsw button[aria-pressed="true"] { background: var(--line); color: var(--fg); }
 .result span { color: var(--faint); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin-right: 6px; }
 footer { color: var(--faint); font-size: 12px; }
 .admin { display: grid; gap: 12px; }
@@ -197,6 +204,7 @@ dialog#chartDlg::backdrop { background: #000a; }
   </section>
 
   <main id="board" hidden>
+    <p class="gradenote">B setups are shown for watching, not as trades to take. A+/A are the tradeable grades.</p>
     <div class="tabs" role="tablist" style="margin-bottom:12px">
       <button class="tab" role="tab" id="tabToday" aria-selected="true">Today</button>
       <button class="tab" role="tab" id="tabLast" aria-selected="false" disabled>Previous session</button>
@@ -326,6 +334,7 @@ function render() {
     const top = el("div", "top");
     top.append(el("span", "grade g-" + (r.grade === "A+" ? "Aplus" : r.grade), r.grade), el("span", "tk", r.ticker),
       el("span", "dir " + r.direction, r.direction === "long" ? "▲ long" : "▼ short"), el("span", "setup", r.setup + " · " + (r.trigger_time || "")));
+    if (r.grade !== "A+" && r.grade !== "A") top.append(el("span", "watchtag", "Watch only"));   // royo 11/06: B (and a re-scored C) are not trades
     const done = FINAL.has(r.live_status);
     top.append(el("span", "pill " + (r.live_status || ""), done ? r.live_status : (r.live_status || r.status || "found")));
     const nums = el("div", "nums");
@@ -333,12 +342,21 @@ function render() {
     nums.append(cell("Entry", num(r.entry)), cell("Stop", num(r.stop)), cell("Trim", num(r.trim)));
     if (r.net_pct != null) nums.append(cell("Net", (r.net_pct > 0 ? "+" : "") + num(r.net_pct) + "%", r.net_pct > 0 ? "pos" : r.net_pct < 0 ? "neg" : ""));
     card.append(top, nums);
-    if (r.opt_contract) {   // the paper trader's contract for the alert entry, refreshed every 15 min
-      const o = el("div", "opt"), pct = r.opt_pct;
-      o.append(el("span", "lbl", r.opt_state === "closed" ? "Option · closed" : r.opt_state === "trimmed" ? "Option · trimmed" : "Option"), el("span", "ct", r.opt_contract),
-        el("span", null, "$" + prem(r.opt_entry) + " → $" + prem(r.opt_now)));
+    if (r.opt_contract || r.opt0_contract) {   // the paper trader's contract for the alert entry, refreshed every 15 min
+      if (r.opt_contract && r.opt0_contract) {   // royo 11/06: switch between the bot's pick and the nearest expiry (0DTE)
+        const sw = el("div", "optsw"); sw.setAttribute("role", "group"); sw.setAttribute("aria-label", "Which contract");
+        for (const [v, txt] of [["pick", "Bot pick"], ["nearest", "Nearest expiry"]]) {
+          const b = el("button", null, txt); b.type = "button"; b.setAttribute("aria-pressed", String(optView(r) === v));
+          b.addEventListener("click", () => { optViews.set(r.id, v); render(); }); sw.append(b);
+        }
+        card.append(sw);
+      }
+      const f = optFields(r, r.opt_contract && optView(r) === "pick" ? "opt" : "opt0");
+      const o = el("div", "opt"), pct = f.pct;
+      o.append(el("span", "lbl", f.label + (f.state === "closed" ? " · closed" : f.state === "trimmed" ? " · trimmed" : "")), el("span", "ct", f.contract),
+        el("span", null, "$" + prem(f.entry) + " → $" + prem(f.now)));
       if (pct != null) o.append(el("span", "pct " + (pct > 0 ? "pos" : pct < 0 ? "neg" : ""), (pct > 0 ? "+" : "") + num(pct) + "%"));
-      if (r.opt_at) o.append(el("span", "at", new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }).format(new Date(r.opt_at)) + " ET"));
+      if (f.at) o.append(el("span", "at", new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }).format(new Date(f.at)) + " ET"));
       card.append(o);
     }
     if (done && r.status) { const res = el("div", "result"); res.append(el("span", null, "Result"), document.createTextNode(r.status)); card.append(res); }
@@ -545,17 +563,28 @@ async function fetchChart(r) {
 
 function etTime(epoch) { return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }).format(new Date(epoch * 1000)); }
 
-function drawOption() {   // the bot's alert-entry contract: from the chart file when it has it, else the board row
+const optViews = new Map();   // setup id -> "pick" | "nearest" (royo 11/06), per card, this page view only
+function optView(r) { return optViews.get(r.id) || (r.opt_contract ? "pick" : "nearest"); }
+const SOURCE = { "bot pick": "Bot pick", "fallback pick": "Fallback pick", "alerted contract": "Alerted contract", "nearest expiry": "Nearest expiry" };
+function fmtMD(day) { const [, m, d] = (day || "").split("-").map(Number); return m + "/" + d; }
+function optFields(r, pre) {   // one contract's board fields; "opt" = the bot's pick (or its fallback), "opt0" = nearest expiry
+  const label = pre === "opt0" ? "Nearest expiry" + ((r.opt0_contract || "").includes(" " + fmtMD(r.day) + " ") ? " (0DTE)" : "")
+    : (SOURCE[r.opt_source] || "Option");
+  return { label, contract: r[pre + "_contract"], entry: r[pre + "_entry"], now: r[pre + "_now"], pct: r[pre + "_pct"], at: r[pre + "_at"], state: r[pre + "_state"] };
+}
+
+function drawOption() {   // the contract the card shows: from the chart file when it has it, else the board row
   const box = $("optPanel"), r = setups.get(chartRow && chartRow.id) || chartRow || {};
-  const o = (chartData && chartData.option) || (r.opt_contract ? { contract: r.opt_contract, entry: r.opt_entry, now: r.opt_now,
-    now_at: r.opt_at ? Date.parse(r.opt_at) / 1000 : null, state: r.opt_state } : null);
+  const near = r.id && optView(r) === "nearest", pre = near ? "opt0" : "opt";
+  const o = (chartData && (near ? chartData.nearest : chartData.option)) || (r[pre + "_contract"] ? { contract: r[pre + "_contract"], entry: r[pre + "_entry"], now: r[pre + "_now"],
+    now_at: r[pre + "_at"] ? Date.parse(r[pre + "_at"]) / 1000 : null, state: r[pre + "_state"], source: near ? "nearest expiry" : r.opt_source } : null);
   box.replaceChildren(); box.hidden = !o;
   if (!o) return;
   const pct = (v) => o.entry && v != null ? (v / o.entry - 1) * 100 : null;
   const pctTxt = (v) => { const p = pct(v); return p == null ? "" : (p > 0 ? "+" : "") + p.toFixed(1) + "%"; };
   const cls = (v) => { const p = pct(v); return p > 0 ? "pos" : p < 0 ? "neg" : ""; };
   const h = el("div", "oph");
-  h.append(el("span", "st", "Bot's option"), el("b", null, o.contract), el("span", "st", o.state || ""));
+  h.append(el("span", "st", SOURCE[o.source] || (near ? "Nearest expiry" : "Bot's option")), el("b", null, o.contract), el("span", "st", o.state || ""));
   if (o.now_at) h.append(el("span", "at", "quote " + etTime(o.now_at) + " ET · ~15 min delayed"));
   const g = el("div", "optgrid");
   const cell = (k, v, sub, c) => { const d = el("div", c || ""); d.append(el("span", null, k), document.createTextNode(v)); if (sub) d.append(el("small", null, sub)); return d; };
