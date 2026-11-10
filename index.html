@@ -94,6 +94,7 @@ h3 { margin: 0 0 10px; font-size: 12px; letter-spacing: .14em; text-transform: u
 .opt .ct { color: var(--fg); font-weight: 700; }
 .opt .pct { font-weight: 700; }
 .opt .at { color: var(--faint); font-size: 11px; margin-left: auto; }
+.copybtn { margin-left: auto; font-size: 13px; padding: 4px 12px; }
 .optsw { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; justify-self: start; }
 .optsw button { font: 11px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 4px 10px; background: none;
   color: var(--muted); border: 0; cursor: pointer; }
@@ -273,6 +274,7 @@ dialog#chartDlg::backdrop { background: #000a; }
         <label><input type="checkbox" id="optEma" checked> EMA 9/21</label>
         <label><input type="checkbox" id="optVwap" checked> VWAP</label>
         <label><input type="checkbox" id="optFlow" checked> Flow</label>
+        <button class="btn copybtn" type="button" id="copyImg">Copy image</button>
       </div>
       <div id="chartBox"></div>
       <div class="gexnote" id="chartNote">Lines: entry (gold), stop (red), trim (green), gamma levels (grey). Flow bars: net bullish (green) or bearish (red) option premium per 5 minutes.</div>
@@ -611,6 +613,64 @@ function drawOption() {   // the contract the card shows: from the chart file wh
   }
 }
 
+// "Copy image": the chart plus the setup and contract, as one PNG for a recap (no gamma panel)
+function recapCanvas() {
+  const r = setups.get(chartRow && chartRow.id) || chartRow; if (!r || !chart) return null;
+  const shot = chart.takeScreenshot(), dpr = shot.width / Math.max(1, $("chartBox").clientWidth || shot.width);
+  const k = Math.min(1, shot.width / dpr / 640);   // shrink the text on a phone-width chart so the long lines fit
+  const W = shot.width, pad = Math.round(16 * dpr * Math.max(k, .75)), line = Math.round(22 * dpr * k);
+  const near = optView(r) === "nearest", pre = near ? "opt0" : "opt";
+  const o = (chartData && (near ? chartData.nearest : chartData.option)) || (r[pre + "_contract"] ? { contract: r[pre + "_contract"], entry: r[pre + "_entry"], now: r[pre + "_now"],
+    state: r[pre + "_state"], source: near ? "nearest expiry" : r.opt_source } : null);
+  const H = pad * 2 + line * (3 + (o ? 2 : 0)) + shot.height + line * 1.5;
+  const c = document.createElement("canvas"); c.width = W; c.height = Math.round(H);
+  const x = c.getContext("2d"), font = (w, px, fam) => `${w} ${Math.round(px * dpr * k)}px ${fam}`;
+  const DISP = '"Archivo", "Helvetica Neue", Arial, sans-serif', MONO = '"IBM Plex Mono", Menlo, monospace';
+  x.fillStyle = "#0d0e11"; x.fillRect(0, 0, W, c.height);
+  let y = pad + line * 0.9;
+  const put = (txt, color, f, dx = 0) => { x.font = f; x.fillStyle = color; x.fillText(txt, pad + dx, y); return x.measureText(txt).width; };
+  let dx = put(r.ticker, "#e8eaee", font(800, 22, DISP));
+  dx += 10 * dpr * k; dx += put(r.grade, r.grade === "A+" || r.grade === "A" ? "#ffb347" : "#9aa0aa", font(800, 18, DISP), dx);
+  dx += 10 * dpr * k; dx += put(r.direction === "long" ? "▲ long" : "▼ short", r.direction === "long" ? "#3ddc97" : "#ff6b6b", font(600, 15, MONO), dx);
+  dx += 10 * dpr * k; put(r.setup, "#9aa0aa", font(400, 15, DISP), dx);
+  y += line;
+  put(`${fmtDay(r.day)} · trigger ${r.trigger_time || "–"} · entry ${num(r.entry)} · stop ${num(r.stop)} · trim ${num(r.trim)}`, "#9aa0aa", font(400, 13, MONO));
+  y += line;
+  const res = r.status ? "Result: " + r.status + (r.net_pct != null ? ` (net ${r.net_pct > 0 ? "+" : ""}${num(r.net_pct)}%)` : "") : (r.live_status ? "Status: " + r.live_status : "");
+  if (res) put(res, r.net_pct > 0 ? "#3ddc97" : r.net_pct < 0 ? "#ff6b6b" : "#e8eaee", font(600, 13, MONO));
+  if (o) {
+    const pct = (v) => o.entry && v != null ? (v / o.entry - 1) * 100 : null, pf = (q) => q == null ? "" : (q > 0 ? "+" : "") + q.toFixed(1) + "%";
+    y += line;
+    dx = put((SOURCE[o.source] || "Option") + (o.state ? " · " + o.state : ""), "#6b7280", font(500, 12, DISP));
+    dx += 10 * dpr * k; put(o.contract, "#e8eaee", font(700, 15, MONO), dx);
+    y += line;
+    dx = put(`$${prem(o.entry)} → $${prem(o.now)}`, "#e8eaee", font(500, 14, MONO));
+    const q = pct(o.now); dx += 10 * dpr * k; dx += put(pf(q), q > 0 ? "#3ddc97" : q < 0 ? "#ff6b6b" : "#9aa0aa", font(700, 14, MONO), dx);
+    if (o.best != null) { dx += 14 * dpr * k; put(`best $${prem(o.best)} (${pf(pct(o.best))})`, "#9aa0aa", font(400, 13, MONO), dx); }
+  }
+  y += line * 0.5;
+  x.drawImage(shot, 0, Math.round(y)); y += shot.height + line;
+  put("Paper record from royo's live board · option prices ~15 min delayed · not financial advice", "#6b7280", font(400, 11, DISP));
+  return c;
+}
+
+async function copyRecap() {
+  const btn = $("copyImg"), say = (t) => { btn.textContent = t; setTimeout(() => { btn.textContent = "Copy image"; }, 1800); };
+  let c; try { c = recapCanvas(); } catch (_) { c = null; }
+  if (!c) { say("Chart not loaded"); return; }
+  const blob = new Promise((ok) => c.toBlob(ok, "image/png"));
+  const name = `${(chartRow && chartRow.ticker) || "setup"}-${(chartRow && chartRow.day) || ""}.png`;
+  try {   // the blob goes in as a promise so Safari keeps the tap as the user gesture
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); say("Copied ✓"); return;
+  } catch (_) {}
+  try {
+    const file = new File([await blob], name, { type: "image/png" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); say("Shared ✓"); return; }
+  } catch (e) { if (e && e.name === "AbortError") return; }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(await blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000); say("Saved ✓");
+}
+
 function setHeader(r) {
   $("dlgTitle").textContent = r.ticker; $("dlgSub").textContent = `${r.grade} · ${r.setup} ${r.direction} · ${fmtDay(r.day)} ${r.trigger_time || ""}`;
   const res = $("dlgResult"); res.replaceChildren();
@@ -811,6 +871,7 @@ async function start() {
       s.value = +s.value + 1; drawGex(+s.value); }, 450);
   });
   $("dlgClose").addEventListener("click", closeChart);
+  $("copyImg").addEventListener("click", copyRecap);
   $("dlgPrev").addEventListener("click", () => stepChart(-1));
   $("dlgNext").addEventListener("click", () => stepChart(1));
   $("chartDlg").addEventListener("click", (e) => { if (e.target === $("chartDlg")) closeChart(); });   // a tap on the backdrop
