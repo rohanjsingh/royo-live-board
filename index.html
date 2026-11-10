@@ -206,7 +206,7 @@ dialog#chartDlg::backdrop { background: #000a; }
 
   <main id="board" hidden>
     <p class="gradenote">B setups are shown for watching, not as trades to take. A+/A are the tradeable grades.<br>
-      "Worked" is judged on the stock's net move under the share plan, not the option. Option lines are for testing only.</p>
+      "Worked" means the stock trade's net % was positive in the setup's direction (trim plan: half at the trim, the rest out on its exit). Option lines are paper tests only and don't decide whether a setup worked.</p>
     <div class="tabs" role="tablist" style="margin-bottom:12px">
       <button class="tab" role="tab" id="tabToday" aria-selected="true">Today</button>
       <button class="tab" role="tab" id="tabLast" aria-selected="false" disabled>Previous session</button>
@@ -222,7 +222,7 @@ dialog#chartDlg::backdrop { background: #000a; }
             <button class="tab" type="button" data-g="all">All</button><button class="tab" type="button" data-g="A+">A+</button><button class="tab" type="button" data-g="A">A</button><button class="tab" type="button" data-g="B">B</button>
           </div>
           <div class="gradebar" id="workBar" role="group" aria-label="Show by result">
-            <button class="tab" type="button" data-w="all">Any result</button><button class="tab" type="button" data-w="worked">Worked</button><button class="tab" type="button" data-w="failed">Didn't work</button><button class="tab" type="button" data-w="open">Open / flat</button>
+            <button class="tab" type="button" data-w="all">Any result</button><button class="tab" type="button" data-w="worked">Worked</button><button class="tab" type="button" data-w="failed">Didn't work</button><button class="tab" type="button" data-w="open">Open / scratch</button>
           </div></div>
         <div class="list" id="setups"></div>
       </section>
@@ -311,7 +311,7 @@ const setups = new Map(), alerts = new Map();
 let client = null, channel = null, fresh = new Set();
 let workPick = "all";   // royo 11/10: worked = stock net % > 0 in the setup's direction (share plan), not the option
 try { workPick = localStorage.getItem("lb-worked") || "all"; } catch (_) {}
-function workedOf(r) { const n = r.net_pct == null || r.net_pct === "" ? null : Number(r.net_pct); return n > 0 ? "worked" : n < 0 ? "failed" : "open"; }
+function workedOf(r) { const n = r.net_pct == null || r.net_pct === "" ? null : Number(r.net_pct); return n == null || Math.abs(n) <= 0.05 ? "open" : n > 0 ? "worked" : "failed"; }   // ±0.05% = scratch, the grading band
 let gradePick = new Set();   // grade bubbles above the setups; empty = all
 try { gradePick = new Set(JSON.parse(localStorage.getItem("lb-grades") || "[]")); } catch (_) {}
 let viewDay = today, lastDay = null, sessions = [];   // today, or an earlier session that has setups (last 10)
@@ -337,7 +337,7 @@ function render() {
   for (const b of $("gradeBar").querySelectorAll(".tab")) b.setAttribute("aria-selected", b.getAttribute("aria-pressed"));
   shown = rows;   // the order the cards are on screen: the chart's arrows follow it
   const box = $("setups"); box.replaceChildren();
-  if (!rows.length && allRows) box.append(el("div", "empty", "No " + [...gradePick].join(" or ") + (workPick === "worked" ? " setups that worked " : workPick === "failed" ? " setups that didn't work " : workPick === "open" ? " open or flat setups " : " setups ")
+  if (!rows.length && allRows) box.append(el("div", "empty", "No " + [...gradePick].join(" or ") + (workPick === "worked" ? " setups that worked " : workPick === "failed" ? " setups that didn't work " : workPick === "open" ? " open or scratch setups " : " setups ")
     + (viewDay === today ? "yet today." : "that session.") + " Tap All / Any result to see the rest."));
   else if (!rows.length) box.append(el("div", "empty", viewDay === today
     ? "No A+, A or B setups yet today. New ones appear here within about a minute." : "No A+, A or B setups that session."));
@@ -352,7 +352,7 @@ function render() {
     const nums = el("div", "nums");
     const cell = (k, v, cls) => { const d = el("div", cls); d.append(el("span", null, k), document.createTextNode(v)); return d; };
     nums.append(cell("Entry", num(r.entry)), cell("Stop", num(r.stop)), cell("Trim", num(r.trim)));
-    if (r.net_pct != null) nums.append(cell("Net", (r.net_pct > 0 ? "+" : "") + num(r.net_pct) + "%", r.net_pct > 0 ? "pos" : r.net_pct < 0 ? "neg" : ""));
+    if (r.net_pct != null) nums.append(cell("Stock net", (r.net_pct > 0 ? "+" : "") + num(r.net_pct) + "%", r.net_pct > 0 ? "pos" : r.net_pct < 0 ? "neg" : ""));
     card.append(top, nums);
     if (r.opt_contract || r.opt0_contract) {   // the paper trader's contract for the alert entry, refreshed every 15 min
       if (r.opt_contract && r.opt0_contract) {   // royo 11/06: switch between the bot's pick and the nearest expiry (0DTE)
