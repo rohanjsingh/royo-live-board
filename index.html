@@ -94,6 +94,7 @@ h3 { margin: 0 0 10px; font-size: 12px; letter-spacing: .14em; text-transform: u
 .opt .ct { color: var(--fg); font-weight: 700; }
 .opt .pct { font-weight: 700; }
 .opt .at { color: var(--faint); font-size: 11px; margin-left: auto; }
+.opt .pend { color: var(--warn); font: 600 12px var(--mono); flex-basis: 100%; }
 .copybtn { margin-left: auto; font-size: 13px; padding: 4px 12px; }
 .optsw { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; justify-self: start; }
 .optsw button { font: 11px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 4px 10px; background: none;
@@ -368,7 +369,9 @@ function render() {
       o.append(el("span", "lbl", f.label + (f.state === "closed" ? " · closed" : f.state === "trimmed" ? " · trimmed" : "")), el("span", "ct", f.contract),
         el("span", null, "$" + prem(f.entry) + " → $" + prem(f.now)));
       if (pct != null) o.append(el("span", "pct " + (pct > 0 ? "pos" : pct < 0 ? "neg" : ""), (pct > 0 ? "+" : "") + num(pct) + "%"));
+      const pend = pendingText(f.state);
       if (f.at) o.append(el("span", "at", new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }).format(new Date(f.at)) + " ET"));
+      if (pend) o.append(el("span", "pend", pend));
       card.append(o);
     }
     if (done && r.status) { const res = el("div", "result"); res.append(el("span", null, "Result"), document.createTextNode(r.status)); card.append(res); }
@@ -578,6 +581,10 @@ function etTime(epoch) { return new Intl.DateTimeFormat("en-US", { timeZone: "Am
 const optViews = new Map();   // setup id -> "pick" | "nearest" (royo 11/06), per card, this page view only
 function optView(r) { return optViews.get(r.id) || (r.opt_contract ? "pick" : "nearest"); }
 const SOURCE = { "bot pick": "Bot pick", "fallback pick": "Fallback pick", "alerted contract": "Alerted contract", "nearest expiry": "Nearest expiry" };
+function pendingText(st) {   // Mac sends "trim pending HH:MM" / "exit pending HH:MM" until the delayed option fill is booked
+  const m = /^(trim|exit) pending ?(\d{1,2}:\d{2})?/.exec(st || ""); if (!m) return "";
+  return "Stock " + (m[1] === "trim" ? "trimmed" : "exited") + (m[2] ? " " + m[2] : "") + " · option fill pending (quote delay)";
+}
 function fmtMD(day) { const [, m, d] = (day || "").split("-").map(Number); return m + "/" + d; }
 function optFields(r, pre) {   // one contract's board fields; "opt" = the bot's pick (or its fallback), "opt0" = nearest expiry
   const label = pre === "opt0" ? "Nearest expiry" + ((r.opt0_contract || "").includes(" " + fmtMD(r.day) + " ") ? " (0DTE)" : "")
@@ -596,7 +603,8 @@ function drawOption() {   // the contract the card shows: from the chart file wh
   const pctTxt = (v) => { const p = pct(v); return p == null ? "" : (p > 0 ? "+" : "") + p.toFixed(1) + "%"; };
   const cls = (v) => { const p = pct(v); return p > 0 ? "pos" : p < 0 ? "neg" : ""; };
   const h = el("div", "oph");
-  h.append(el("span", "st", SOURCE[o.source] || (near ? "Nearest expiry" : "Bot's option")), el("b", null, o.contract), el("span", "st", o.state || ""));
+  const pend = pendingText(r[pre + "_state"]);   // the chart file doesn't know about a pending fill yet; the board row does
+  h.append(el("span", "st", SOURCE[o.source] || (near ? "Nearest expiry" : "Bot's option")), el("b", null, o.contract), el("span", "st", pend || o.state || ""));
   if (o.now_at) h.append(el("span", "at", "quote " + etTime(o.now_at) + " ET · ~15 min delayed"));
   const g = el("div", "optgrid");
   const cell = (k, v, sub, c) => { const d = el("div", c || ""); d.append(el("span", null, k), document.createTextNode(v)); if (sub) d.append(el("small", null, sub)); return d; };
