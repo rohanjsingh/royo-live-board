@@ -205,7 +205,8 @@ dialog#chartDlg::backdrop { background: #000a; }
   </section>
 
   <main id="board" hidden>
-    <p class="gradenote">B setups are shown for watching, not as trades to take. A+/A are the tradeable grades.</p>
+    <p class="gradenote">B setups are shown for watching, not as trades to take. A+/A are the tradeable grades.<br>
+      "Worked" is judged on the stock's net move under the share plan, not the option. Option lines are for testing only.</p>
     <div class="tabs" role="tablist" style="margin-bottom:12px">
       <button class="tab" role="tab" id="tabToday" aria-selected="true">Today</button>
       <button class="tab" role="tab" id="tabLast" aria-selected="false" disabled>Previous session</button>
@@ -219,6 +220,9 @@ dialog#chartDlg::backdrop { background: #000a; }
         <div class="sethead"><h3>Setups</h3>
           <div class="gradebar" id="gradeBar" role="group" aria-label="Show grades">
             <button class="tab" type="button" data-g="all">All</button><button class="tab" type="button" data-g="A+">A+</button><button class="tab" type="button" data-g="A">A</button><button class="tab" type="button" data-g="B">B</button>
+          </div>
+          <div class="gradebar" id="workBar" role="group" aria-label="Show by result">
+            <button class="tab" type="button" data-w="all">Any result</button><button class="tab" type="button" data-w="worked">Worked</button><button class="tab" type="button" data-w="failed">Didn't work</button><button class="tab" type="button" data-w="open">Open / flat</button>
           </div></div>
         <div class="list" id="setups"></div>
       </section>
@@ -305,6 +309,9 @@ const $ = (id) => document.getElementById(id);
 const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 const setups = new Map(), alerts = new Map();
 let client = null, channel = null, fresh = new Set();
+let workPick = "all";   // royo 11/10: worked = stock net % > 0 in the setup's direction (share plan), not the option
+try { workPick = localStorage.getItem("lb-worked") || "all"; } catch (_) {}
+function workedOf(r) { const n = r.net_pct == null || r.net_pct === "" ? null : Number(r.net_pct); return n > 0 ? "worked" : n < 0 ? "failed" : "open"; }
 let gradePick = new Set();   // grade bubbles above the setups; empty = all
 try { gradePick = new Set(JSON.parse(localStorage.getItem("lb-grades") || "[]")); } catch (_) {}
 let viewDay = today, lastDay = null, sessions = [];   // today, or an earlier session that has setups (last 10)
@@ -324,11 +331,14 @@ function render() {
   const rows = [...setups.values()].sort((a, b) => when(b).localeCompare(when(a)) || String(b.first_seen || "").localeCompare(String(a.first_seen || "")));   // newest first
   const allRows = rows.length;
   if (gradePick.size) rows.splice(0, rows.length, ...rows.filter(r => gradePick.has(r.grade)));
+  if (workPick !== "all") rows.splice(0, rows.length, ...rows.filter(r => workedOf(r) === workPick));
+  for (const b of $("workBar").querySelectorAll(".tab")) { const on = String(b.dataset.w === workPick); b.setAttribute("aria-pressed", on); b.setAttribute("aria-selected", on); }
   for (const b of $("gradeBar").querySelectorAll(".tab")) b.setAttribute("aria-pressed", String(b.dataset.g === "all" ? !gradePick.size : gradePick.has(b.dataset.g)));
   for (const b of $("gradeBar").querySelectorAll(".tab")) b.setAttribute("aria-selected", b.getAttribute("aria-pressed"));
   shown = rows;   // the order the cards are on screen: the chart's arrows follow it
   const box = $("setups"); box.replaceChildren();
-  if (!rows.length && allRows) box.append(el("div", "empty", "No " + [...gradePick].join(" or ") + " setups " + (viewDay === today ? "yet today." : "that session.") + " Tap All to see the rest."));
+  if (!rows.length && allRows) box.append(el("div", "empty", "No " + [...gradePick].join(" or ") + (workPick === "worked" ? " setups that worked " : workPick === "failed" ? " setups that didn't work " : workPick === "open" ? " open or flat setups " : " setups ")
+    + (viewDay === today ? "yet today." : "that session.") + " Tap All / Any result to see the rest."));
   else if (!rows.length) box.append(el("div", "empty", viewDay === today
     ? "No A+, A or B setups yet today. New ones appear here within about a minute." : "No A+, A or B setups that session."));
   for (const r of rows) {
@@ -613,10 +623,18 @@ function drawOption() {   // the contract the card shows: from the chart file wh
   }
 }
 
+let hideLevels = false;
+function chartShot() {   // screenshot without the gamma level lines, then put them back where the viewer had the chart
+  const range = chart.timeScale().getVisibleLogicalRange();
+  hideLevels = true; drawChart(); if (range) chart.timeScale().setVisibleLogicalRange(range);
+  const shot = chart.takeScreenshot();
+  hideLevels = false; drawChart(); if (range) chart.timeScale().setVisibleLogicalRange(range);
+  return shot;
+}
 // "Copy image": the chart plus the setup and contract, as one PNG for a recap (no gamma panel)
 function recapCanvas() {
   const r = setups.get(chartRow && chartRow.id) || chartRow; if (!r || !chart) return null;
-  const shot = chart.takeScreenshot(), dpr = shot.width / Math.max(1, $("chartBox").clientWidth || shot.width);
+  const shot = chartShot(), dpr = shot.width / Math.max(1, $("chartBox").clientWidth || shot.width);
   const k = Math.min(1, shot.width / dpr / 640);   // shrink the text on a phone-width chart so the long lines fit
   const W = shot.width, pad = Math.round(16 * dpr * Math.max(k, .75)), line = Math.round(22 * dpr * k);
   const near = optView(r) === "nearest", pre = near ? "opt0" : "opt";
@@ -738,7 +756,7 @@ function drawChart() {
   }
   const line = (price, color, title, style = 0) => price && candles.createPriceLine({ price, color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title });
   line(chartData.entry, "#ffd166", "entry"); line(chartData.stop, "#ff6b6b", "stop"); line(chartData.trim, "#3ddc97", "trim");
-  for (const l of chartData.levels || []) line(l.price, "#9aa0aa", l.label, 2);
+  if (!hideLevels) for (const l of chartData.levels || []) line(l.price, "#9aa0aa", l.label, 2);   // gamma levels (left out of Copy image)
   if (tf !== "1d") {   // markers on the bar that contains each moment
     const at = (ts) => { let best = null; for (const r of rows) if (r[0] <= ts) best = r[0]; return best == null ? null : t(best); };
     const long = chartData.direction === "long", m = [];
@@ -880,6 +898,12 @@ async function start() {
     if (!$("chartDlg").open || (e.target && e.target.matches && e.target.matches("input, textarea, select"))) return;
     if (e.key === "ArrowLeft") { e.preventDefault(); stepChart(-1); }
     if (e.key === "ArrowRight") { e.preventDefault(); stepChart(1); }
+  });
+  $("workBar").addEventListener("click", (e) => {
+    const w = e.target.closest && e.target.closest("[data-w]"); if (!w) return;
+    workPick = w.dataset.w === workPick ? "all" : w.dataset.w;
+    try { localStorage.setItem("lb-worked", workPick); } catch (_) {}
+    render();
   });
   $("gradeBar").addEventListener("click", (e) => {
     const g = e.target.closest && e.target.closest("[data-g]"); if (!g) return;
