@@ -46,9 +46,11 @@
   function ungate() { const g = document.getElementById("cb-gate"); if (g) g.remove(); }
 
   function boardLink() {
-    if (document.getElementById("cb-board")) return;
-    const a = document.createElement("a"); a.id = "cb-board"; a.href = BOARD_URL; a.textContent = "Live board ↗";
-    document.body.appendChild(a);
+    if (document.getElementById("cb-board-tab")) return;
+    const nav = document.querySelector(".tabs");   // royo 11/10: the live board is a tab of the casebook
+    const a = document.createElement("button"); a.type = "button"; a.id = "cb-board-tab"; a.textContent = "Live board";
+    a.onclick = () => { location.href = BOARD_URL; };
+    if (nav) nav.insertBefore(a, nav.firstChild); else document.body.appendChild(a);
   }
 
   async function signIn() {   // password or email link, like the live board; resolves once signed in
