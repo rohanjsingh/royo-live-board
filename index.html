@@ -162,6 +162,7 @@ dialog#chartDlg::backdrop { background: #000a; }
     <div class="right">
       <span id="conn"><span class="dot" id="dot"></span><span id="connText">Offline</span></span>
       <span id="who" hidden></span>
+      <a class="btn" id="cbLink" href="casebook/" hidden>Casebook</a>
       <button class="btn" id="pwBtn" hidden>Set password</button>
       <button class="btn" id="signout" hidden>Sign out</button>
     </div>
@@ -449,8 +450,20 @@ function subscribe() {
     .subscribe((status) => setConn(status === "SUBSCRIBED" ? "live" : "wait", status === "SUBSCRIBED" ? "Live" : "Reconnecting…"));
 }
 
+async function adminCasebook() {   // royo 11/11: an admin lands on the casebook; ?board=1 keeps the board. Viewers: no change.
+  try {
+    const { data, error } = await client.rpc("is_admin");
+    if (error || data !== true) return;
+    const head = await fetch("casebook/", { method: "HEAD", cache: "no-store" });   // only once the casebook page is published
+    if (!head.ok) return;
+    $("cbLink").hidden = false;
+    if (!new URLSearchParams(location.search).has("board")) location.replace("casebook/");
+  } catch (_) {}   // any failure leaves the board exactly as it is
+}
+
 async function enter(session) {
   $("signin").hidden = true;
+  adminCasebook();
   $("who").hidden = false; $("who").textContent = session.user.email; $("signout").hidden = false; $("pwBtn").hidden = false;
   const me = await client.from("viewers").select("email").limit(1);
   if (me.error || !me.data.length) { $("notInvited").hidden = false; $("board").hidden = true; setConn("", "Not invited"); return; }
