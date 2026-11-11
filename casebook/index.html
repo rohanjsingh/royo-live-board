@@ -406,6 +406,15 @@ textarea{resize:vertical;min-height:70px}
 .tv-btn:disabled{opacity:.35;cursor:not-allowed}
 .tv-chk{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);margin-left:auto}
 .tv-bub{position:absolute;left:0;top:0;z-index:2;pointer-events:none}
+.tv-gex{position:absolute;left:8px;bottom:32px;z-index:3;font-size:11px;color:var(--muted);display:flex;gap:4px 10px;flex-wrap:wrap;pointer-events:none;background:rgba(14,14,16,.72);padding:2px 6px;border-radius:6px;max-width:calc(100% - 90px)}
+.tv-gex b{font-weight:600}
+.tv-tip[data-dir=bull]{border-color:var(--win)}.tv-tip[data-dir=bear]{border-color:var(--loss)}
+.ft{border-left:3px solid var(--muted);padding-left:9px;min-width:0}
+.ft.bull{border-left-color:var(--win)}.ft.bear{border-left-color:var(--loss)}
+.ft-h{font-family:var(--f-data);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.ft-t{font-family:var(--f-data);font-weight:700;font-size:13px;margin:2px 0 6px;overflow-wrap:anywhere}
+.ft-g{display:grid;grid-template-columns:auto auto auto auto;gap:3px 12px;font-size:12px;align-items:baseline}
+.ft-g span{color:var(--muted)}.ft-g b{text-align:right;white-space:nowrap;font-family:var(--f-data);font-weight:600}
 .tv-wrap{position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:rgba(10,10,12,.55)}
 .tv-chart{height:clamp(300px,52vh,480px);width:100%}
 .tv-ohlc{position:absolute;left:8px;top:6px;z-index:3;font-size:11px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;pointer-events:none;background:rgba(14,14,16,.72);padding:2px 6px;border-radius:6px}
@@ -1192,7 +1201,7 @@ function priceChartSVG(c,opts){
   });
   return s+"</svg>";
 }
-function chartLegend(read){return `<div class="legend"><span><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1L11 10H1Z" fill="var(--win)"/></svg>Call, bullish</span><span><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 11L11 2H1Z" fill="var(--win)"/></svg>Put, bullish (sold)</span><span><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1L11 10H1Z" fill="var(--loss)"/></svg>Call, bearish (sold)</span><span><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 11L11 2H1Z" fill="var(--loss)"/></svg>Put, bearish</span><span>Bigger marker = bigger premium</span>${read?`<span><svg width="18" height="8"><line x1="0" x2="18" y1="4" y2="4" stroke="var(--gamma)" stroke-dasharray="4 3"/></svg>Key level</span>`:`<span><svg width="18" height="8"><line x1="0" x2="18" y1="4" y2="4" stroke="var(--muted)" stroke-dasharray="4 3"/></svg>Prior close</span><span><svg width="18" height="8"><line x1="0" x2="18" y1="4" y2="4" stroke="var(--trig)" stroke-width="2" stroke-dasharray="4 3"/></svg>Trigger</span><span><svg width="18" height="8"><line x1="0" x2="18" y1="4" y2="4" stroke="var(--exit)" stroke-width="2" stroke-dasharray="4 3"/></svg>Exit</span>`}</div>`}
+function chartLegend(read){return `<div class="legend"><span><svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.2" fill="none" stroke="var(--win)" stroke-width="1.6"/></svg>Bullish flow</span><span><svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.2" fill="none" stroke="var(--loss)" stroke-width="1.6"/></svg>Bearish flow</span><span>Bigger circle = bigger premium</span><span><svg width="18" height="10"><rect x="0" y="1" width="18" height="8" fill="#f5c84c" fill-opacity=".35" stroke="#f5c84c" stroke-width="1"/></svg>King gamma node</span><span><svg width="18" height="10"><rect x="0" y="1" width="18" height="8" fill="#a78bfa" fill-opacity=".35" stroke="#a78bfa" stroke-width="1"/></svg>Negative gamma</span><span><svg width="18" height="10"><rect x="0" y="1" width="18" height="8" fill="#5aa9ff" fill-opacity=".35" stroke="#5aa9ff" stroke-width="1"/></svg>Positive gamma</span>${read?`<span><svg width="18" height="8"><line x1="0" x2="18" y1="4" y2="4" stroke="var(--gamma)" stroke-dasharray="4 3"/></svg>Key level</span>`:`<span><svg width="18" height="8"><line x1="0" x2="18" y1="4" y2="4" stroke="var(--muted)" stroke-dasharray="4 3"/></svg>Prior close</span><span><svg width="18" height="8"><line x1="0" x2="18" y1="4" y2="4" stroke="var(--trig)" stroke-width="2" stroke-dasharray="4 3"/></svg>Trigger</span><span><svg width="18" height="8"><line x1="0" x2="18" y1="4" y2="4" stroke="var(--exit)" stroke-width="2" stroke-dasharray="4 3"/></svg>Exit</span>`}</div>`}
 function renderLegend(){$("#legend").innerHTML=KINDS.map(([k,l])=>`<span><i class="dot k-${k}"></i>${esc(l)}</span>`).join("")}
 
 /* ---------- filters ---------- */
@@ -1998,6 +2007,19 @@ function lifeHTML(f){
   const cls=l.status==="open"?"open":l.status==="partial"?"partial":"closed";
   return `<div class="life ${cls}">${esc(t)}</div>${l.note?`<div class="m">${esc(l.note)}</div>`:""}`;
 }
+function flowCardHTML(g,tk){
+  const list=g.slice().sort((a,b)=>(b.prem||0)-(a.prem||0)),show=list.slice(0,3);
+  const row=(k,v)=>v===""||v==null?"":`<span>${k}</span><b>${esc(String(v))}</b>`;
+  return show.map(f=>{
+    const i=printInfo(f),bull=f.act?f.act==="buy":f.side==="bull",bear=f.act?f.act==="sell":f.side==="bear";
+    const dir=f.act==="buy"?"Bought":f.act==="sell"?"Sold":bull?"Bullish":bear?"Bearish":"Neutral";
+    const exp=/^\d{4}-\d{2}-\d{2}$/.test(f.expiry||"")?new Date(f.expiry+"T12:00:00Z").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric",timeZone:"UTC"}):"";
+    const title=f.strike&&f.cp?`${tk?"$"+tk+" ":""}${f.strike}${f.cp}${exp?", Exp: "+exp:""}`:(f.key||i.contract||f.label||"Option");
+    const fill=i.fill?i.fill[0].toUpperCase()+i.fill.slice(1):"";
+    return `<div class="ft ${bull?"bull":bear?"bear":""}"><div class="ft-h">Options flow trade</div><div class="ft-t">${esc(title)}</div>
+      <div class="ft-g">${row("Premium",fmtMoney(f.prem||0))}${row("Strike",f.strike?(+f.strike).toFixed(2):"–")}${row("Type",i.kind||"–")}${row("Side",fill||"–")}${row("SigScore",f.sig!=null&&f.sig!==""?(+f.sig).toFixed(2):"–")}${row("Time",fmtWall(f.s,true)+" ET")}${row("Size",f.size?fmtK(f.size)+(f.price?" @ "+(+f.price).toFixed(2):""):"")}${row("Stock",+f.spot>0?(+f.spot).toFixed(2):"")}<span>Direction</span><b class="${bull?"pos":bear?"neg":""}">${dir}</b></div>
+      ${lifeHTML(f)}</div>`}).join("")+(list.length>show.length?`<div class="more">+${list.length-show.length} more here</div>`:"");
+}
 function printTipHTML(g,withDate){
   const list=g.slice().sort((a,b)=>(b.prem||0)-(a.prem||0)), show=list.slice(0,4);
   const tot=list.reduce((a,f)=>a+(f.prem||0),0);
@@ -2017,14 +2039,14 @@ function tvChartHTML(c,P,tfs,read){
       <div class="tv-tf" id="${P}-tf" role="group" aria-label="Timeframe">${tfs.map(([k,l])=>`<button type="button" class="tv-btn" data-tf="${k}" ${tfRows(c,k).length?"":"disabled"} aria-pressed="false">${l}</button>`).join("")}</div>
       <select class="tv-sel" id="${P}-focus-sel" aria-label="Show flow for"><option value="">All flow</option></select>
       <label class="tv-chk"><input type="checkbox" id="${P}-flow" checked> Flow</label>
-      ${gexSets(c).length?`<label class="tv-chk" style="margin-left:0" title="Net dealer gamma at each strike, from the gamma map saved every 5 minutes. Bigger bubble = more gamma. Green = positive, red = negative, gold ring = biggest node."><input type="checkbox" id="${P}-gbub" checked> Gamma bubbles</label>`:""}
+      ${gexSets(c).length?`<label class="tv-chk" style="margin-left:0" title="Bands at the biggest gamma strikes, from the gamma map saved every 5 minutes. Yellow = king node, purple = negative gamma, blue = positive gamma."><input type="checkbox" id="${P}-gbub" checked> Gamma levels</label>`:""}
       ${read?"":`<label class="tv-chk" style="margin-left:0"><input type="checkbox" id="${P}-marks" checked> Marks</label>`}
       <button type="button" class="tv-btn" id="${P}-fit">${read?"Latest":"Case day"}</button>
     </div>
     <div class="ind" id="${P}-ind" role="group" aria-label="Indicators"></div>
     <div class="tv-wrap"><div class="tv-chart" id="${P}-chart"></div><div class="tv-ohlc num" id="${P}-ohlc"></div><div class="tv-tip" id="${P}-tip" role="tooltip" hidden></div></div>
     <div class="tv-focus" id="${P}-focus" hidden></div>
-    <div class="tv-prints" id="${P}-prints"><span class="hint">Hover a flow marker for the contract, fill and whether it was closed later. Click a marker to see every buy and sell of that contract. Tap an indicator to turn it on or off. Scroll to zoom, drag to pan.</span></div>
+    <div class="tv-prints" id="${P}-prints"><span class="hint">Hover a flow circle for the contract, fill and whether it was closed later. Click a marker to see every buy and sell of that contract. Tap an indicator to turn it on or off. Scroll to zoom, drag to pan.</span></div>
   </div>`;
 }
 function destroyTV(){if(tv){try{tv.chart.remove()}catch(e){}tv=null}if(gx){clearInterval(gx.timer);gx=null}}
@@ -2197,21 +2219,21 @@ function mountTV(c,P="tv",read=false){
     showOHLC(d);
     if(!read&&gx&&p&&p.time!=null)gx.onTime(p.time);
     const g=d?S.groups.get(p.time):null;
-    showTip(g,p);
+    showTip(S.hit?S.hit(p):null,p);
     if(!d)return; /* keep the last bar's prints so they can be clicked */
-    q("prints").innerHTML=g&&g.length?g.map(f=>`<button type="button" class="tv-print ${f.side==="bull"?"pos":f.side==="bear"?"neg":""}" data-key="${esc(printKey(f))}" title="Show only this contract">${esc(fmtWall(f.s,S.tf==="1d"||S.tf==="1h"))} ${esc(f.label||((f.cp||"")+" "+fmtMoney(f.prem||0)))}</button>`).join(""):`<span class="hint">${d?"No big prints in this bar.":"Hover a flow marker for details; click a marker or a print here to show only that contract. Scroll to zoom, drag to pan."}</span>`;
+    q("prints").innerHTML=g&&g.length?g.map(f=>`<button type="button" class="tv-print ${f.side==="bull"?"pos":f.side==="bear"?"neg":""}" data-key="${esc(printKey(f))}" title="Show only this contract">${esc(fmtWall(f.s,S.tf==="1d"||S.tf==="1h"))} ${esc(f.label||((f.cp||"")+" "+fmtMoney(f.prem||0)))}</button>`).join(""):`<span class="hint">${d?"No big prints in this bar.":"Hover a flow circle for details; click a marker or a print here to show only that contract. Scroll to zoom, drag to pan."}</span>`;
   });
   chart.subscribeClick(p=>{
-    const g=p&&p.time!=null&&S.showFlow?S.groups.get(p.time):null;if(!g||!g.length)return;
+    const g=S.showFlow&&S.hit?S.hit(p):null;if(!g||!g.length)return;
     const f=g.slice().sort((a,b)=>(b.prem||0)-(a.prem||0))[0],k=printKey(f);
     if(k&&k!==S.focus)setFocus(k);
   });
   function showTip(g,p){
     const tip=q("tip");if(!tip)return;
-    const key=g&&g.length&&S.showFlow?p.time:null;
+    const key=g&&g.length&&S.showFlow?g.map(f=>f.s+"|"+printKey(f)+"|"+(f.prem||0)).join(","):null;
     if(key!==S.hlKey){S.hlKey=key;const hl=key==null?[]:g.filter(f=>f.life&&f.life.closedTs);if(hl.length||S.hl.length){S.hl=hl;drawMarkers()}}
     if(key==null||!p.point){tip.hidden=true;return}
-    if(tip.dataset.k!==String(key)){tip.innerHTML=printTipHTML(g,S.tf==="1d"||S.tf==="1h");tip.dataset.k=key}
+    if(tip.dataset.k!==String(key)){tip.innerHTML=flowCardHTML(g,c.ticker||"");tip.dataset.k=key;{const f0=g.slice().sort((a,b)=>(b.prem||0)-(a.prem||0))[0];tip.dataset.dir=(f0.act?f0.act==="buy":f0.side==="bull")?"bull":(f0.act?f0.act==="sell":f0.side==="bear")?"bear":""}}
     tip.hidden=false;
     const W=el.clientWidth,H=el.clientHeight,w=tip.offsetWidth,h=tip.offsetHeight;
     let x=p.point.x+16;if(x+w>W-8)x=p.point.x-w-16;x=Math.max(8,x);
@@ -2224,49 +2246,67 @@ function mountTV(c,P="tv",read=false){
     const cls=d.close>=d.open?"pos":"neg", ch=(d.close-d.open)/d.open*100, dp=d.close<50?2:2;
     q("ohlc").innerHTML=`<b>${esc(c.ticker)}</b> · ${esc(S.tf)} <span>O <i class="${cls}">${d.open.toFixed(dp)}</i></span> <span>H <i class="${cls}">${d.high.toFixed(dp)}</i></span> <span>L <i class="${cls}">${d.low.toFixed(dp)}</i></span> <span>C <i class="${cls}">${d.close.toFixed(dp)}</i></span> <i class="${cls}">${ch>=0?"+":""}${ch.toFixed(2)}%</i>`+Object.entries(IND).map(([id,x])=>{const v=S.indV[id]&&S.indV[id].get(d.time);return v!=null?` <i style="color:${x.col}">${x.n.replace("EMA ","E")} ${v.toFixed(2)}</i>`:""}).join("");
   }
-  // gamma bubbles: net dealer gamma by strike from the saved gamma maps, drawn over the price chart
-  const bubSets=gexSets(c), bubBox=q("gbub");
-  if(bubSets.length&&bubBox){
-    let on=true;try{on=localStorage.getItem("casebook-gbub")!=="0"}catch(e){}
-    bubBox.checked=on;
-    const cv=document.createElement("canvas");cv.className="tv-bub";cv.setAttribute("aria-hidden","true");el.parentNode.appendChild(cv);
-    const BSEC={"1m":60,"5m":300,"15m":900}, kingCol="#ffc46b", meta=new Map();
+  // overlay canvas: gamma channels (bands at the biggest gamma strikes) and flow circles
+  const ovSets=gexSets(c), gBox=q("gbub");
+  const cv=document.createElement("canvas");cv.className="tv-bub";cv.setAttribute("aria-hidden","true");el.parentNode.appendChild(cv);
+  const gline=document.createElement("div");gline.className="tv-gex num";gline.hidden=true;el.parentNode.appendChild(gline);
+  S.dots=[];S.dotSrc=[];
+  S.hit=p=>{if(!p||!p.point)return null;const h=S.dots.filter(d=>Math.hypot(d.x-p.point.x,d.y-p.point.y)<=d.r+3).map(d=>d.f);return h.length?h:null};
+  {
+    const G_KING="#f5c84c",G_NEG="#a78bfa",G_POS="#5aa9ff",BSEC={"1m":60,"5m":300,"15m":900},meta=new Map();
     const metaOf=set=>{if(meta.has(set))return meta.get(set);
       const F=set.frames,t=F.map(f=>toNY(+f.ts)),gaps=t.slice(1).map((v,i)=>v-t[i]).filter(v=>v>0).sort((a,b)=>a-b);
-      const m={t,gap:gaps.length?gaps[gaps.length>>1]:300,mx:Math.sqrt(Math.max(1,...F.flatMap(f=>(f.strikes||[]).map(r=>Math.abs(+r[1]||0)))))};
+      const ks=[...new Set(F.flatMap(f=>(f.strikes||[]).map(r=>+r[0])))].sort((a,b)=>a-b),st=ks.slice(1).map((v,i)=>v-ks[i]).filter(v=>v>0).sort((a,b)=>a-b);
+      const m={t,gap:gaps.length?gaps[gaps.length>>1]:300,step:st.length?st[st.length>>1]:1,mx:Math.sqrt(Math.max(1,...F.flatMap(f=>(f.strikes||[]).map(r=>Math.abs(+r[1]||0)))))};
       meta.set(set,m);return m};
-    let raf=0,pt=null;
+    const sgn=v=>(v>0?"+":"−")+fmtMoney(Math.abs(v));
+    let raf=0,pt=null,ptT=null,gl="";
     const paint=()=>{raf=0;try{
       const ts=chart.timeScale(),W=ts.width(),H=el.clientHeight-ts.height(),dpr=window.devicePixelRatio||1;
       if(!(W>0&&H>0))return;
       if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);cv.style.width=W+"px";cv.style.height=H+"px"}
       const g=cv.getContext("2d");g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);
-      const bs=BSEC[S.tf];if(!bubBox.checked||!bs)return;
-      const set=bubSets[gx&&gx.c===c&&bubSets[gx.set]?gx.set:0][1],F=set.frames,M=metaOf(set),rows=tfRows(c,S.tf);if(!rows.length)return;
-      const byBar=new Map();F.forEach((f,j)=>{const i=barIndexFor(rows,M.t[j]);if(i>=0&&M.t[j]-rows[i].time<bs)byBar.set(i,f)});
-      const R=Math.max(3,Math.min(16,ts.options().barSpacing*Math.max(1,Math.round(M.gap/bs))*.6));
-      let hit=null;
-      byBar.forEach((f,i)=>{const x=ts.timeToCoordinate(rows[i].time);if(x==null||x<-R||x>W+R)return;
-        const kS=f.king?+f.king.strike:null;
-        (f.strikes||[]).map(r=>[+r[0],+r[1]||0,candles.priceToCoordinate(+r[0])]).filter(r=>r[1]&&r[2]!=null&&r[2]>-R&&r[2]<H+R)
-          .sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).slice(0,12).forEach(([k,v,y])=>{
-            const r=Math.max(1.5,R*Math.sqrt(Math.abs(v))/M.mx),col=v>0?up:dn;
-            g.beginPath();g.arc(x,y,r,0,6.2832);g.fillStyle=alpha(col,.26);g.fill();
-            g.lineWidth=k===kS?1.6:1;g.strokeStyle=k===kS?kingCol:alpha(col,.8);g.stroke();
-            if(pt){const d=Math.hypot(pt.x-x,pt.y-y);if(d<=r+4&&(!hit||d<hit.d))hit={d,x,y,r,k,v,ts:f.ts,king:k===kS}}})});
-      if(hit){const txt=`${hit.k} strike · ${hit.v>0?"+":"−"}${fmtMoney(Math.abs(hit.v))} gamma · ${nyHM(hit.ts)}${hit.king?" · biggest node":""}`;
-        g.font="11px IBM Plex Mono, ui-monospace, Menlo, monospace";const w=g.measureText(txt).width+12;
-        let bx=hit.x+hit.r+6;if(bx+w>W-4)bx=hit.x-hit.r-6-w;bx=Math.max(4,bx);const by=Math.max(4,Math.min(H-22,hit.y-9));
-        g.fillStyle="rgba(18,18,21,.94)";g.strokeStyle=alpha(hit.v>0?up:dn,.8);g.lineWidth=1;g.beginPath();g.rect(bx,by,w,18);g.fill();g.stroke();
-        g.fillStyle="#ececf1";g.textBaseline="middle";g.fillText(txt,bx+6,by+9.5)}
+      const rows=tfRows(c,S.tf);if(!rows.length)return;
+      const sp=ts.options().barSpacing,bs=BSEC[S.tf];
+      let txt="";
+      if(gBox&&gBox.checked&&bs&&ovSets.length){
+        const set=ovSets[gx&&gx.c===c&&ovSets[gx.set]?gx.set:0][1],F=set.frames,M=metaOf(set),segs=[];
+        F.forEach((f,j)=>{const i=barIndexFor(rows,M.t[j]);if(i<0||M.t[j]-rows[i].time>=bs)return;
+          if(segs.length&&segs[segs.length-1].i===i)segs[segs.length-1].f=f;else segs.push({i,f})});
+        const hy=k=>{const a=candles.priceToCoordinate(k),b=candles.priceToCoordinate(k+M.step*.22);return a==null||b==null?4:Math.max(2.5,Math.min(13,Math.abs(a-b)))};
+        segs.forEach((s,n)=>{const x0=ts.logicalToCoordinate(s.i)-sp/2,x1=n+1<segs.length?ts.logicalToCoordinate(segs[n+1].i)-sp/2:x0+sp*Math.max(1,Math.round(M.gap/bs));
+          if(x1<0||x0>W)return;
+          const kS=s.f.king?+s.f.king.strike:null;
+          const vis=(s.f.strikes||[]).map(r=>[+r[0],+r[1]||0,candles.priceToCoordinate(+r[0])]).filter(r=>r[1]&&r[2]!=null&&r[2]>-14&&r[2]<H+14).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
+          const top=vis.slice(0,5);const kg=vis.find(r=>r[0]===kS);if(kg&&!top.includes(kg))top.push(kg);
+          top.forEach(([k,v,y])=>{const col=k===kS?G_KING:v<0?G_NEG:G_POS,h=hy(k),a=Math.sqrt(Math.abs(v))/M.mx;
+            g.fillStyle=alpha(col,.1+.24*a);g.fillRect(x0,y-h,x1-x0,2*h);
+            g.fillStyle=alpha(col,.35+.4*a);g.fillRect(x0,y-h,x1-x0,1);g.fillRect(x0,y+h-1,x1-x0,1)})});
+        // header: the map at the hovered time (else the latest one)
+        if(segs.length){let f=segs[segs.length-1].f;if(ptT!=null)for(let j=segs.length-1;j>=0;j--){if(rows[segs[j].i].time<=ptT){f=segs[j].f;break}if(j===0)f=segs[0].f}
+          const all=(f.strikes||[]).map(r=>[+r[0],+r[1]||0]).filter(r=>r[1]).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])),net=all.reduce((a,r)=>a+r[1],0),kS=f.king?+f.king.strike:null;
+          txt=`<span>GEX ${esc(nyHM(f.ts))}</span><span>Net <b style="color:${net<0?G_NEG:G_POS}">${sgn(net)}</b></span>`+all.slice(0,3).map(([k,v])=>`<span>${k} <b style="color:${k===kS?G_KING:v<0?G_NEG:G_POS}">${sgn(v)}</b></span>`).join("")+(all.length>3?`<span>+${all.length-3}</span>`:"")}
+      }
+      if(txt!==gl){gl=txt;gline.innerHTML=txt}gline.hidden=!txt;
+      // flow circles at the print's time and stock price
+      S.dots=[];let hot=null;
+      S.dotSrc.forEach(d=>{const r0=rows[d.i];if(!r0)return;const x=ts.logicalToCoordinate(d.i);if(x==null||x<-14||x>W+14)return;
+        const pr=+d.f.spot>0?Math.min(r0.high,Math.max(r0.low,+d.f.spot)):r0.close,y=candles.priceToCoordinate(pr);if(y==null)return;
+        g.beginPath();g.arc(x,y,d.r,0,6.2832);g.fillStyle=d.muted?alpha(d.col,.1):"rgba(14,14,16,.55)";g.fill();
+        g.lineWidth=d.muted?1:1.6;g.strokeStyle=d.muted?alpha(d.col,.35):d.col;g.stroke();
+        if(d.text){g.font="11px IBM Plex Mono, ui-monospace, Menlo, monospace";g.textBaseline="middle";g.fillStyle=d.col;g.fillText(d.text,x+d.r+4,y)}
+        if(!d.muted){S.dots.push({x,y,r:d.r,f:d.f});if(pt&&Math.hypot(pt.x-x,pt.y-y)<=d.r+3&&(!hot||d.r<hot.r))hot={x,y,r:d.r,col:d.col}}});
+      if(hot){g.beginPath();g.arc(hot.x,hot.y,hot.r+2.5,0,6.2832);g.lineWidth=1.5;g.strokeStyle=alpha(hot.col,.6);g.stroke()}
     }catch(e){}};
     const sched=()=>{if(!raf)raf=requestAnimationFrame(paint)};
     chart.timeScale().subscribeVisibleLogicalRangeChange(sched);
-    chart.subscribeCrosshairMove(p=>{pt=p&&p.point?{x:p.point.x,y:p.point.y}:null;sched()});
+    chart.subscribeCrosshairMove(p=>{pt=p&&p.point?{x:p.point.x,y:p.point.y}:null;ptT=p&&p.time!=null?p.time:null;sched()});
     el.addEventListener("wheel",sched,{passive:true});el.addEventListener("pointermove",sched,{passive:true});
+    el.addEventListener("mouseleave",()=>{pt=null;ptT=null;sched()});
     if(window.ResizeObserver)new ResizeObserver(sched).observe(el);
-    bubBox.onchange=()=>{try{localStorage.setItem("casebook-gbub",bubBox.checked?"1":"0")}catch(e){}sched()};
-    S.bub=sched;
+    if(gBox){let on=true;try{on=localStorage.getItem("casebook-gbub")!=="0"}catch(e){}gBox.checked=on;
+      gBox.onchange=()=>{try{localStorage.setItem("casebook-gbub",gBox.checked?"1":"0")}catch(e){}sched()}}
+    S.ov=sched;S.bub=sched;
   }
   function setTF(k){
     S.tf=k;const rows=tfRows(c,k);
@@ -2274,7 +2314,7 @@ function mountTV(c,P="tv",read=false){
     vol.setData(rows.map(r=>({time:r.time,value:r.value,color:alpha(r.close>=r.open?up:dn,.35)})));
     chart.applyOptions({timeScale:{timeVisible:k!=="1d"}});
     document.querySelectorAll("#"+P+"-tf .tv-btn").forEach(b=>b.setAttribute("aria-pressed",b.dataset.tf===k));
-    drawInd();drawMarkers();showOHLC(null);focusCase();if(S.bub)S.bub();
+    drawInd();drawMarkers();showOHLC(null);focusCase();if(S.ov)S.ov();
   }
   // Every print on one contract: the full list from c.contracts when the grader sent it, else the flow prints with that key.
   function focusPrints(k){
@@ -2304,27 +2344,22 @@ function mountTV(c,P="tv",read=false){
   function drawMarkers(){
     const rows=tfRows(c,S.tf);S.groups=new Map();
     const marks=[];
+    S.dotSrc=[];
     if(S.showFlow&&S.focus){
-      // focused contract in full color (buys below, sells above); every other print muted and small
-      const fp=focusPrints(S.focus), agg=new Map();
-      fp.forEach(f=>{const i=barIndexFor(rows,f.s);if(i<0)return;const t=rows[i].time;
+      // focused contract in full color (buys green, sells red); every other print muted and small
+      const fp=focusPrints(S.focus),mx=Math.max(1,...fp.map(f=>f.prem||0)),seen=new Set();
+      fp.forEach(f=>{const i=barIndexFor(rows,f.s);if(i<0)return;const t=rows[i].time;seen.add(t);
         if(!S.groups.has(t))S.groups.set(t,[]);S.groups.get(t).push(f);
-        const key=t+"|"+f.act;const a=agg.get(key)||{t,act:f.act,prem:0};a.prem+=f.prem||0;agg.set(key,a)});
-      const mx=Math.max(1,...[...agg.values()].map(a=>a.prem));
-      [...agg.values()].forEach(a=>marks.push({time:a.t,position:a.act==="sell"?"aboveBar":"belowBar",shape:a.act==="sell"?"arrowDown":a.act==="buy"?"arrowUp":"circle",
-        color:a.act==="buy"?up:a.act==="sell"?dn:fg,size:.7+1.8*Math.sqrt(a.prem/mx),text:(a.act==="buy"||a.act==="sell"||a.prem>=mx*.15)?(a.act==="buy"?"Buy ":a.act==="sell"?"Sell ":"")+fmtMoney(a.prem):""}));
-      const seen=new Set([...agg.values()].map(a=>a.t));
-      S.prints.forEach(f=>{if(printKey(f)===S.focus)return;const i=barIndexFor(rows,f.s);if(i<0)return;const t=rows[i].time;if(seen.has(t))return;seen.add(t);
-        marks.push({time:t,position:f.cp==="P"?"aboveBar":"belowBar",shape:"circle",color:alpha(fg,.3),size:.3})});
+        S.dotSrc.push({i,f,col:f.act==="buy"?up:f.act==="sell"?dn:fg,r:4+7*Math.sqrt((f.prem||0)/mx),text:(f.prem||0)>=mx*.3?(f.act==="buy"?"Buy ":f.act==="sell"?"Sell ":"")+fmtMoney(f.prem||0):""})});
+      S.prints.forEach(f=>{if(printKey(f)===S.focus)return;const i=barIndexFor(rows,f.s);if(i<0)return;
+        S.dotSrc.push({i,f,col:fg,r:2.5,muted:true})});
     } else if(S.showFlow){
-      const agg=new Map();
+      const mx=Math.max(1,...S.prints.map(f=>f.prem||0));
       S.prints.forEach(f=>{const i=barIndexFor(rows,f.s);if(i<0)return;const t=rows[i].time;
         if(S.tf!=="1d"&&f.s-t>=(TF_SEC[S.tf]||86400))return;
         if(!S.groups.has(t))S.groups.set(t,[]);S.groups.get(t).push(f);
-        const key=t+"|"+f.cp+"|"+f.side;const a=agg.get(key)||{t,cp:f.cp,side:f.side,prem:0,n:0};a.prem+=f.prem||0;a.n++;agg.set(key,a)});
-      const mx=Math.max(1,...[...agg.values()].map(a=>a.prem));
-      [...agg.values()].forEach(a=>marks.push({time:a.t,position:a.cp==="P"?"aboveBar":"belowBar",shape:a.cp==="P"?"arrowDown":a.cp==="C"?"arrowUp":"circle",
-        color:a.side==="bull"?up:a.side==="bear"?dn:fg,size:.6+1.8*Math.sqrt(a.prem/mx),text:a.prem>=mx*.3?fmtMoney(a.prem):""}));
+        S.dotSrc.push({i,f,col:f.side==="bull"?up:f.side==="bear"?dn:fg,r:3.5+7*Math.sqrt((f.prem||0)/mx)})});
+      S.dotSrc.sort((a,b)=>b.r-a.r);
     }
     (S.hl||[]).forEach(f=>{const i=barIndexFor(rows,toNY(+f.life.closedTs));if(i<0)return;
       marks.push({time:rows[i].time,position:f.cp==="P"?"belowBar":"aboveBar",shape:"square",color:cssVar("--accent-3"),size:.9,text:(f.life.status==="partial"?"Partly closed ":"Closed ")+fmtWall(toNY(+f.life.closedTs))})});
@@ -2341,6 +2376,7 @@ function mountTV(c,P="tv",read=false){
         if(i>=0)marks.push({time:rows[i].time,position:lg?"aboveBar":"belowBar",shape:lg?"arrowDown":"arrowUp",color:ext,size:1.2,text:"Exit"+(isNaN(r)?"":" "+(r>=0?"+":"")+r.toFixed(2)+"%")})}}
     marks.sort((a,b)=>a.time-b.time);
     candles.setMarkers(marks);
+    if(S.ov)S.ov();
   }
   function focusCase(){
     const rows=tfRows(c,S.tf);if(!rows.length)return;
