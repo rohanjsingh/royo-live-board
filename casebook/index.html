@@ -1,8 +1,8 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>Setup Casebook</title>
+<title>Setup Library</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js"></script>
 <script>
-/* Setup Casebook on Supabase (royo 11/10). The casebook page was written for claude.ai's window.claude.use(...)
+/* Setup Library on Supabase (royo 11/10). The casebook page was written for claude.ai's window.claude.use(...)
    runtime; this file provides the same calls on top of Supabase, so the page itself stays as it was:
      db         collection(c).doc(id).get/set/update/delete, collection(c).onSnapshot(ok, err)
                 light docs -> table cb_docs (coll, id, data); "casedata" -> bucket cb-casedata/<id>.json.gz
@@ -40,7 +40,7 @@
       const st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
       g = document.createElement("div"); g.id = "cb-gate"; document.body.appendChild(g);
     }
-    g.innerHTML = `<div class="box"><h1>Setup Casebook</h1>${html}</div>`;
+    g.innerHTML = `<div class="box"><h1>Setup Library</h1>${html}</div>`;
     return g;
   }
   function ungate() { const g = document.getElementById("cb-gate"); if (g) g.remove(); }
@@ -86,7 +86,7 @@
     if (!session) session = await signIn();
     const { data: admin } = await client.rpc("is_admin");
     if (admin !== true) {
-      gate(`<p>This casebook is for the owner's account only. You're signed in as ${session.user.email}.</p>
+      gate(`<p>This library is for the owner's account only. You're signed in as ${session.user.email}.</p>
         <p><a href="${BOARD_URL}">Open the live board</a></p>`);
       throw new Error("not an admin");
     }
@@ -747,8 +747,8 @@ table.gs-t tr.r-en td.k{box-shadow:inset 3px 0 0 var(--accent)} table.gs-t tr.r-
 
 <header class="top wrap">
   <div class="topbar">
-    <div class="brand"><h1>Setup Casebook</h1><span>Gamma and options flow setups that led to big moves</span></div>
-    <nav class="tabs" role="tablist" aria-label="Sections"><button type="button" role="tab" data-tab="cases" aria-selected="true">Casebook</button><button type="button" role="tab" data-tab="reads" aria-selected="false">Reads</button><button type="button" role="tab" data-tab="watch" aria-selected="false">Watchlist</button><button type="button" role="tab" data-tab="bt" aria-selected="false">Backtest</button><button type="button" role="tab" data-tab="ix" aria-selected="false">Index flow</button><button type="button" role="tab" data-tab="sx" aria-selected="false">Stock flow</button><button type="button" role="tab" data-tab="rp" aria-selected="false">Daily report</button><button type="button" role="tab" data-tab="gs" aria-selected="false">Gamma Setups</button></nav>
+    <div class="brand"><h1>Setup Library</h1><span>Gamma and options flow setups that led to big moves</span></div>
+    <nav class="tabs" role="tablist" aria-label="Sections"><button type="button" role="tab" data-tab="cases" aria-selected="true">Library</button><button type="button" role="tab" data-tab="reads" aria-selected="false">Reads</button><button type="button" role="tab" data-tab="watch" aria-selected="false">Watchlist</button><button type="button" role="tab" data-tab="bt" aria-selected="false">Backtest</button><button type="button" role="tab" data-tab="ix" aria-selected="false">Index flow</button><button type="button" role="tab" data-tab="sx" aria-selected="false">Stock flow</button><button type="button" role="tab" data-tab="rp" aria-selected="false">Daily report</button><button type="button" role="tab" data-tab="gs" aria-selected="false">Gamma Setups</button></nav>
     <button class="btn" id="btn-guide" type="button">Grading guide</button>
     <button class="btn" id="btn-export-json" type="button">Export JSON</button>
     <button class="btn" id="btn-export-csv" type="button">Export CSV</button>
@@ -759,7 +759,7 @@ table.gs-t tr.r-en td.k{box-shadow:inset 3px 0 0 var(--accent)} table.gs-t tr.r-
 
 <main class="wrap" id="cases-view">
   <div class="notice" id="notice" hidden></div>
-  <div class="notice mig" id="mig" hidden><span id="mig-msg"></span> <button class="btn primary" type="button" id="mig-go">Speed up the casebook</button></div>
+  <div class="notice mig" id="mig" hidden><span id="mig-msg"></span> <button class="btn primary" type="button" id="mig-go">Speed up the library</button></div>
   <section class="live-sec" id="live-sec" aria-label="Setups in progress today" hidden><div class="live-head" id="live-head"></div><div class="cards" id="live-cards"></div></section>
   <section class="stats" id="stats" aria-label="Summary"></section>
 
@@ -1037,7 +1037,7 @@ function openGuide(){
        <div class="tier t-${g.k}"><div class="big">${g.g}</div>
          <div><h4>${esc(g.name)} <span>score ${g.range}</span></h4><p>${esc(g.means)}</p><p class="act">${esc(g.act)}</p>
            ${L.ex?`<p><button class="ex" type="button" data-open="${esc(L.ex.id)}">Example: ${esc(L.ex.ticker)} ${esc(fmtDate(L.ex.date))}${L.ex.outcome?" · "+esc(OUT_LABEL[L.ex.outcome]||L.ex.outcome):""}${L.ex.movePct!=null&&L.ex.movePct!==""?" "+fmtPct(L.ex.movePct):""}</button></p>`:""}</div>
-         <div class="rates">${rate("Backfill win rate",g.bf)}${rate("Your casebook",L.j?Math.round(L.w/L.j*100):null,L.n?(L.j?`${L.w} of ${L.j} graded won`:"")+(L.n>L.j?`${L.j?", ":""}${L.n-L.j} not graded yet`:""):"No cases at this grade yet","live")}</div>
+         <div class="rates">${rate("Backfill win rate",g.bf)}${rate("Your library",L.j?Math.round(L.w/L.j*100):null,L.n?(L.j?`${L.w} of ${L.j} graded won`:"")+(L.n>L.j?`${L.j?", ":""}${L.n-L.j} not graded yet`:""):"No cases at this grade yet","live")}</div>
        </div>`}).join("")}</div>
        <p class="hint" style="margin-top:8px">Honest scoring (from 10/28): every setup is scored only on what was known at its entry minute; later reclaims and prints show as 0-point "After entry" notes. Exit rule (from 10/28): sell half at 0.5 × the 14-day ATR, move the stop to breakeven, and exit the rest on a 5-min close past VWAP (or at 3:45). A win means the whole position made money. Gamma points use the map known at entry (from 10/28). Library win rates through 10/28, all setups: A+ 6 · 83%, A 16 · 94%, B 53 · 43%, C 198 · 30%, D 288 · 30%. Flush: A+ 1 · 100%, A 7 · 71%, B 15 · 73%, C 49 · 45%, D 116 · 51%. Strength/Weakness + flow: 14 trades, all wins so far. Samples are small (one month). Crypto-linked names drop one grade; a sales-only trigger is a warning only.</p>
      </div>
@@ -1448,7 +1448,7 @@ async function recapRender(){
   if(trades.length>shown.length)text(`+ ${trades.length-shown.length} earlier trades`,PAD+20,y+104+shown.length*40,`400 15px ${body}`,C.mut);
   y+=trH+40;
   text(opt?"Paper backtest of scanner alerts with modeled option prices. Not financial advice.":"Paper backtest of scanner alerts at the rule's prices. Not financial advice.",PAD,y,`400 15px ${body}`,C.mut);
-  text("Setup Casebook",W-PAD,y,`600 15px ${body}`,C.acc,"right");
+  text("Setup Library",W-PAD,y,`600 15px ${body}`,C.acc,"right");
   return await new Promise(res=>cv.toBlob(b=>res(b),"image/png"));
 }
 $("#bt-recap").onclick=async()=>{
@@ -1653,7 +1653,7 @@ function renderLive(){
   sec.hidden=false;
   const upd=Math.max(0,...L.map(c=>+c.liveUpdatedAt||0));
   const P=L.map(livePnl).filter(p=>p.size&&p.usd!=null),tot=P.reduce((a,p)=>a+p.usd,0);
-  $("#live-head").innerHTML=`<h2><i class="live-dot"></i>In progress today</h2>${P.length?`<span class="pnl-tot">Total P&amp;L at your sizing <b class="${tot>=0?"pos":"neg"}">${fmtUsd(tot)}</b> <span class="hint">(${P.length} trade${P.length>1?"s":""})</span></span>`:""}<span class="hint">${L.length} setup${L.length>1?"s":""}${upd?" · updated "+nyHM(upd)+" ET":""} · these move into the casebook once graded after the close</span>`;
+  $("#live-head").innerHTML=`<h2><i class="live-dot"></i>In progress today</h2>${P.length?`<span class="pnl-tot">Total P&amp;L at your sizing <b class="${tot>=0?"pos":"neg"}">${fmtUsd(tot)}</b> <span class="hint">(${P.length} trade${P.length>1?"s":""})</span></span>`:""}<span class="hint">${L.length} setup${L.length>1?"s":""}${upd?" · updated "+nyHM(upd)+" ET":""} · these move into the library once graded after the close</span>`;
   $("#live-cards").innerHTML=L.map(cardHTML).join("")+(X.length?`<details class="live-off" style="grid-column:1/-1"><summary>${X.length} skipped or dropped today: ${X.map(c=>esc(c.ticker)+" "+(c.direction==="short"?"short":"long")).join(", ")}</summary><div class="cards" style="margin-top:10px">${X.map(cardHTML).join("")}</div></details>`:"");
 }
 function cardHTML(c){
@@ -2431,7 +2431,7 @@ $("#edit-form").addEventListener("submit",async e=>{
     if(db){await db.collection("cases").doc(id).set(body)}
     else{const i=cases.findIndex(c=>c.id===id);const rec={id,...body};i>=0?cases[i]=rec:cases.push(rec);render()}
     $("#dlg-edit").close();toast(isNew?"Case study added":"Changes saved");
-  }catch(ex){err.textContent=ex&&ex.code==="quota_exceeded"?"The database is full. Delete some case studies or chart images, then save again.":ex&&ex.code==="invalid_argument"?"You can view this casebook but not change it.":"Couldn't save. Check your connection and try again.";err.hidden=false}
+  }catch(ex){err.textContent=ex&&ex.code==="quota_exceeded"?"The database is full. Delete some case studies or chart images, then save again.":ex&&ex.code==="invalid_argument"?"You can view this library but not change it.":"Couldn't save. Check your connection and try again.";err.hidden=false}
   finally{$("#e-save").disabled=false}
 });
 async function onDelete(){
@@ -2466,7 +2466,7 @@ $("#import-file").onchange=async e=>{
     for(const c of arr){if(!c||!c.ticker)continue;const id=(typeof c.id==="string"&&/^[\w\-.~:@+]{1,100}$/.test(c.id))?c.id:"cs-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,7);const prev=cases.find(x=>x.id===id);const body={...(prev||{}),...c};delete body.id;
       if(db)await db.collection("cases").doc(id).set(body);else{cases=cases.filter(x=>x.id!==id);cases.push({id,...body})}n++}
     if(!db)render();toast(`Imported ${n} case ${n===1?"study":"studies"}`);
-  }catch(ex){toast("That file isn't a casebook JSON export")}
+  }catch(ex){toast("That file isn't a library JSON export")}
 };
 
 $("#btn-new").onclick=()=>openEdit(null);
@@ -2518,7 +2518,7 @@ function renderWatch(){
   box.innerHTML=[...groups.entries()].sort((a,b)=>gscore(b[1])-gscore(a[1])).map(([t,g])=>{
     g.sort(sortIn);
     const nb=g.reduce((a,p)=>a+(p.bias==="bullish"?1:-1)*(+p.premium||0),0), cc=caseCount((t||"").toUpperCase());
-    return `<section class="panel wl-grp"><h3><span class="tk">${esc(t)}</span><span class="net ${nb>=0?"pos":"neg"}">net ${nb>=0?"bullish":"bearish"} ${fmtMoney(Math.abs(nb))}</span>${cc?`<button type="button" class="chipbtn cs" data-wl-case="${esc(t)}">${cc} case${cc===1?"":"s"} in the casebook</button>`:""}</h3>
+    return `<section class="panel wl-grp"><h3><span class="tk">${esc(t)}</span><span class="net ${nb>=0?"pos":"neg"}">net ${nb>=0?"bullish":"bearish"} ${fmtMoney(Math.abs(nb))}</span>${cc?`<button type="button" class="chipbtn cs" data-wl-case="${esc(t)}">${cc} case${cc===1?"":"s"} in the library</button>`:""}</h3>
       ${g.map(p=>{const chg=p.lastPrice!=null&&p.avgPrice?(p.lastPrice/p.avgPrice-1)*100:null;const sideTxt=p.side==="bought"?"Bought":"Sold";
         return `<div class="wl-row">
           <div><div class="c">${esc(p.label||p.key)}</div><div class="s"><span class="${p.bias==="bullish"?"pos":"neg"}">${sideTxt} · ${esc(p.bias||"")}</span></div></div>
@@ -3003,7 +3003,7 @@ try{const t=localStorage.getItem("casebook-tab");if(t==="reads"||t==="watch"||t=
   if(!C||!C.use){loaded=true;notice("Saving isn't available here. Entries you add will last until you close the page.");render();return}
   const [d,a,dl,u]=await Promise.all([C.use("db"),C.use("assets"),C.use("downloads"),C.use("user")]);
   db=d;assets=a;downloads=dl;
-  if(u){try{const w=await u.can("data.write");if(w===false){canWrite=false;$("#btn-new").disabled=true;$("#lbl-import").hidden=true;notice("You're viewing this casebook read-only.")}}catch(e){}}
+  if(u){try{const w=await u.can("data.write");if(w===false){canWrite=false;$("#btn-new").disabled=true;$("#lbl-import").hidden=true;notice("You're viewing this library read-only.")}}catch(e){}}
   if(!downloads){$("#btn-export-json").hidden=true;$("#btn-export-csv").hidden=true}
   if(!db){loaded=true;notice("Saving isn't available in this view. Entries you add will last until you close the page.");render();return}
   db.collection("reads").onSnapshot(snap=>{reads=snap.docs.map(s=>({id:s.id,...s.data()}));renderReads()},()=>{});
