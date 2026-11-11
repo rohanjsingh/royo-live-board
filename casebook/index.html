@@ -713,6 +713,14 @@ button.tv-print:hover{border-color:var(--accent)}
 .rp .ix-md td{white-space:nowrap}
 .rp .ix-md td.w{white-space:normal;min-width:220px;max-width:52ch;text-align:left;font-family:var(--f-body);color:var(--muted)}
 .rp .ix-md td.pos{color:var(--win)} .rp .ix-md td.neg{color:var(--loss)}
+/* questions box under each flow study */
+.qa-item{border:1px solid var(--line);border-radius:12px;background:var(--bg);padding:10px 12px;margin-bottom:10px;min-width:0}
+.qa-q{font-weight:600;white-space:pre-wrap;overflow-wrap:anywhere}
+.qa-meta{font-size:11px;color:var(--muted);margin-top:2px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.qa-a{margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+.qa-a .ix-md{max-width:none}
+.qa-form{display:flex;flex-direction:column;gap:8px}
+.qa-form .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .rp-jump{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 /* seven tabs: the tab bar scrolls sideways inside itself on narrow screens instead of widening the page */
 .tabs{max-width:100%;overflow-x:auto;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}.tabs button{flex:none;white-space:nowrap}
@@ -892,6 +900,16 @@ table.gs-t tr.r-en td.k{box-shadow:inset 3px 0 0 var(--accent)} table.gs-t tr.r-
       <p class="hint" id="ix-hint" style="margin:8px 0 0"></p>
     </div>
     <div id="ix-body"></div>
+    <div class="panel" id="qa-panel" hidden>
+      <h2>Questions about this study</h2>
+      <p class="hint" style="margin:0 0 10px">Write a question or a thought about this session. It is saved here in the library, and Claude answers it on the next check, usually the same evening. For a faster answer, say "check questions" in the chat.</p>
+      <div id="qa-list"></div>
+      <form class="qa-form" id="qa-form">
+        <label class="lbl" for="qa-text">Your question</label>
+        <textarea id="qa-text" rows="3" placeholder="e.g. Why did the short fire two minutes after the long?"></textarea>
+        <div class="row"><button class="btn primary" type="submit" id="qa-send">Save question</button><span class="hint" id="qa-msg" aria-live="polite"></span></div>
+      </form>
+    </div>
   </div>
 </main>
 <main class="wrap" id="rp-view" hidden>
@@ -2752,6 +2770,7 @@ function renderIXAnalysis(a){
 }
 function renderIX(){
   const body=$("#ix-body"),pick=$("#ix-pick");if(!body)return;
+  setTimeout(renderQA,0);
   const all=ixDocs.slice(),ana=ixGroup==="index"?all.find(x=>x.kind==="analysis"||x.id==="analysis"):null;
   ixSel=ixSelBy[ixGroup]||null;
   const hint=$("#ix-hint");if(hint)hint.textContent=ixGroup==="index"?"Index flow post-mortems: one session of QQQ or SPY, every big options print laid over the 1-minute chart, net premium by expiry bucket every 5 minutes, and the gamma map that was in place. The point is to see which prints, if any, came before the moves.":"Single-stock flow studies: one session of one name, every big options print laid over the chart (1-minute up to daily), net premium by expiry bucket every 5 minutes, the key moments, and the gamma map replay with the walls and the king node. The point is to see which prints, if any, came before the moves, and whether gamma levels were the targets.";
@@ -2825,6 +2844,32 @@ function ixPick(id){ixSel=id;ixSelBy[ixGroup]=id;try{localStorage.setItem("caseb
 $("#ix-pick").onclick=e=>{const b=e.target.closest(".chip");if(!b)return;if(b.dataset.v)return ixPick(b.dataset.v);const t=b.dataset.t,cur=ixDocs.find(x=>x.id===ixSel),want=ixDocs.filter(x=>x.ticker===t).sort((a,b2)=>(b2.date||"").localeCompare(a.date||""));const same=cur&&want.find(x=>x.date===cur.date);ixPick((same||want[0]||{}).id)};
 $("#ix-pick").onchange=e=>{if(e.target.id!=="ix-date")return;const cur=ixDocs.find(x=>x.id===ixSel);const d=ixDocs.find(x=>cur&&x.ticker===cur.ticker&&x.date===e.target.value);if(d)ixPick(d.id)};
 window.__ixDebug={set:docs=>{ixDocs=docs;renderIX()}};
+/* ---------- questions about a flow study ----------
+   questions/{id}: {study (indexFlow doc id), ticker, date, text, askedAt, status:"open"|"answered", answer (markdown), answeredAt}.
+   The page writes the question; the index-flow thread writes the answer. */
+let qaDocs=[];
+function renderQA(){
+  const p=$("#qa-panel");if(!p)return;
+  const d=ixSel&&ixSel!=="analysis"?ixDocs.find(x=>x.id===ixSel):null;
+  p.hidden=!d;if(!d)return;
+  const list=qaDocs.filter(q=>q&&q.study===d.id&&q.text).sort((a,b)=>(a.askedAt||"").localeCompare(b.askedAt||""));
+  $("#qa-list").innerHTML=list.map(q=>`<div class="qa-item"><div class="qa-q">${esc(q.text)}</div><div class="qa-meta"><span>${esc(q.askedAt?ago(q.askedAt):"")}</span><span class="st ${q.answer?"done":"requested"}">${q.answer?"Answered":"Waiting"}</span></div>${q.answer?`<div class="qa-a"><div class="ix-md">${rpMD(q.answer)}</div></div>`:""}</div>`).join("");
+  $("#qa-send").disabled=!db||!canWrite;
+}
+$("#qa-form").onsubmit=async e=>{
+  e.preventDefault();
+  const m=$("#qa-msg"),t=$("#qa-text").value.trim(),d=ixSel&&ixSel!=="analysis"?ixDocs.find(x=>x.id===ixSel):null;
+  m.style.color="";
+  if(!t){m.textContent="Type a question first.";return}
+  if(!d||!db){m.textContent="Questions can't be saved in this view.";return}
+  const id=`${d.id}-${Date.now().toString(36)}`;
+  $("#qa-send").disabled=true;
+  try{await db.collection("questions").doc(id).set({study:d.id,ticker:d.ticker||"",date:d.date||"",text:t,askedAt:new Date().toISOString(),status:"open"});
+    $("#qa-text").value="";m.textContent="Saved. The answer shows up here.";
+    if(!qaDocs.find(q=>q.id===id)){qaDocs.push({id,study:d.id,text:t,askedAt:new Date().toISOString(),status:"open"});renderQA()}}
+  catch(err){m.textContent="Couldn't save the question. Try again.";m.style.color="var(--loss)"}
+  $("#qa-send").disabled=false;
+};
 /* ---------- daily report (nightly scanner + flow report) ----------
    reports/{date}: {date, headline, stats:[{k,v,s}], md (markdown; each "## " heading becomes its own panel), source, updatedAt}.
    Written by the index-flow thread after the Mac's 5:35 PM ET nightly_report job. */
@@ -3012,6 +3057,7 @@ try{const t=localStorage.getItem("casebook-tab");if(t==="reads"||t==="watch"||t=
   db.collection("later").onSnapshot(snap=>{const m={};snap.docs.forEach(s=>{const d=s.data();m[d.date||s.id]=d});laterByDay=m;if(typeof render==="function"&&!migrating)render()},()=>{});
   db.collection("optionsBT").onSnapshot(snap=>{const m={};snap.docs.forEach(s=>{const d=s.data();m[d.date||s.id]=d});optByDay=m;if(btOn)renderBT()},()=>{});
   db.collection("indexFlow").onSnapshot(snap=>{ixDocs=snap.docs.map(s=>({id:s.id,...s.data()}));if(!$("#ix-view").hidden)renderIX()},()=>{});
+  db.collection("questions").onSnapshot(snap=>{qaDocs=snap.docs.map(s=>({id:s.id,...s.data()}));if(!$("#ix-view").hidden)renderQA()},()=>{});
   db.collection("reports").onSnapshot(snap=>{rpDocs=snap.docs.map(s=>({id:s.id,...s.data()}));if(!$("#rp-view").hidden)renderRP()},()=>{});
   db.collection("gammaSetups").onSnapshot(snap=>{gsDocs=snap.docs.map(s=>({id:s.id,...s.data()}));if(!$("#gs-view").hidden)renderGS()},()=>{});
   C.use("comments").then(cm=>{comments=cm}).catch(()=>{});
