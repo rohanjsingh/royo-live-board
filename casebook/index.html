@@ -405,6 +405,7 @@ textarea{resize:vertical;min-height:70px}
 .tv-btn[aria-pressed="true"]{background:linear-gradient(120deg,var(--accent-3),var(--accent));color:var(--accent-ink)}
 .tv-btn:disabled{opacity:.35;cursor:not-allowed}
 .tv-chk{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);margin-left:auto}
+.tv-bub{position:absolute;left:0;top:0;z-index:2;pointer-events:none}
 .tv-wrap{position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:rgba(10,10,12,.55)}
 .tv-chart{height:clamp(300px,52vh,480px);width:100%}
 .tv-ohlc{position:absolute;left:8px;top:6px;z-index:3;font-size:11px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;pointer-events:none;background:rgba(14,14,16,.72);padding:2px 6px;border-radius:6px}
@@ -2016,6 +2017,7 @@ function tvChartHTML(c,P,tfs,read){
       <div class="tv-tf" id="${P}-tf" role="group" aria-label="Timeframe">${tfs.map(([k,l])=>`<button type="button" class="tv-btn" data-tf="${k}" ${tfRows(c,k).length?"":"disabled"} aria-pressed="false">${l}</button>`).join("")}</div>
       <select class="tv-sel" id="${P}-focus-sel" aria-label="Show flow for"><option value="">All flow</option></select>
       <label class="tv-chk"><input type="checkbox" id="${P}-flow" checked> Flow</label>
+      ${gexSets(c).length?`<label class="tv-chk" style="margin-left:0" title="Net dealer gamma at each strike, from the gamma map saved every 5 minutes. Bigger bubble = more gamma. Green = positive, red = negative, gold ring = biggest node."><input type="checkbox" id="${P}-gbub" checked> Gamma bubbles</label>`:""}
       ${read?"":`<label class="tv-chk" style="margin-left:0"><input type="checkbox" id="${P}-marks" checked> Marks</label>`}
       <button type="button" class="tv-btn" id="${P}-fit">${read?"Latest":"Case day"}</button>
     </div>
@@ -2130,6 +2132,7 @@ function mountGex(c){
   gx.onTime=t=>{if(!gx||!gx.follow||gx.timer)return;const F=frames();let k=0;for(let j=0;j<F.length;j++){if(toNY(F[j].ts)<=t)k=j;else break}if(k!==gx.i){gx.i=k;draw()}};
   $("#gx-range").oninput=e=>{gx.i=+e.target.value;draw()};
   $("#gx-follow").onchange=e=>{gx.follow=e.target.checked};
+  {const gd=$("#gx-dte");if(gd)gd.addEventListener("click",()=>setTimeout(()=>{[tv,rtv].forEach(s=>s&&s.bub&&s.bub())},0))}
   const stop=()=>{clearInterval(gx.timer);gx.timer=null;$("#gx-play").textContent="Play"};
   $("#gx-play").onclick=()=>{if(gx.timer){stop();return}if(gx.i>=frames().length-1)gx.i=0;$("#gx-play").textContent="Pause";
     gx.timer=setInterval(()=>{if(!gx)return;if(gx.i>=frames().length-1){stop();return}gx.i++;draw()},350)};
@@ -2221,13 +2224,57 @@ function mountTV(c,P="tv",read=false){
     const cls=d.close>=d.open?"pos":"neg", ch=(d.close-d.open)/d.open*100, dp=d.close<50?2:2;
     q("ohlc").innerHTML=`<b>${esc(c.ticker)}</b> · ${esc(S.tf)} <span>O <i class="${cls}">${d.open.toFixed(dp)}</i></span> <span>H <i class="${cls}">${d.high.toFixed(dp)}</i></span> <span>L <i class="${cls}">${d.low.toFixed(dp)}</i></span> <span>C <i class="${cls}">${d.close.toFixed(dp)}</i></span> <i class="${cls}">${ch>=0?"+":""}${ch.toFixed(2)}%</i>`+Object.entries(IND).map(([id,x])=>{const v=S.indV[id]&&S.indV[id].get(d.time);return v!=null?` <i style="color:${x.col}">${x.n.replace("EMA ","E")} ${v.toFixed(2)}</i>`:""}).join("");
   }
+  // gamma bubbles: net dealer gamma by strike from the saved gamma maps, drawn over the price chart
+  const bubSets=gexSets(c), bubBox=q("gbub");
+  if(bubSets.length&&bubBox){
+    let on=true;try{on=localStorage.getItem("casebook-gbub")!=="0"}catch(e){}
+    bubBox.checked=on;
+    const cv=document.createElement("canvas");cv.className="tv-bub";cv.setAttribute("aria-hidden","true");el.parentNode.appendChild(cv);
+    const BSEC={"1m":60,"5m":300,"15m":900}, kingCol="#ffc46b", meta=new Map();
+    const metaOf=set=>{if(meta.has(set))return meta.get(set);
+      const F=set.frames,t=F.map(f=>toNY(+f.ts)),gaps=t.slice(1).map((v,i)=>v-t[i]).filter(v=>v>0).sort((a,b)=>a-b);
+      const m={t,gap:gaps.length?gaps[gaps.length>>1]:300,mx:Math.sqrt(Math.max(1,...F.flatMap(f=>(f.strikes||[]).map(r=>Math.abs(+r[1]||0)))))};
+      meta.set(set,m);return m};
+    let raf=0,pt=null;
+    const paint=()=>{raf=0;try{
+      const ts=chart.timeScale(),W=ts.width(),H=el.clientHeight-ts.height(),dpr=window.devicePixelRatio||1;
+      if(!(W>0&&H>0))return;
+      if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);cv.style.width=W+"px";cv.style.height=H+"px"}
+      const g=cv.getContext("2d");g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);
+      const bs=BSEC[S.tf];if(!bubBox.checked||!bs)return;
+      const set=bubSets[gx&&gx.c===c&&bubSets[gx.set]?gx.set:0][1],F=set.frames,M=metaOf(set),rows=tfRows(c,S.tf);if(!rows.length)return;
+      const byBar=new Map();F.forEach((f,j)=>{const i=barIndexFor(rows,M.t[j]);if(i>=0&&M.t[j]-rows[i].time<bs)byBar.set(i,f)});
+      const R=Math.max(3,Math.min(16,ts.options().barSpacing*Math.max(1,Math.round(M.gap/bs))*.6));
+      let hit=null;
+      byBar.forEach((f,i)=>{const x=ts.timeToCoordinate(rows[i].time);if(x==null||x<-R||x>W+R)return;
+        const kS=f.king?+f.king.strike:null;
+        (f.strikes||[]).map(r=>[+r[0],+r[1]||0,candles.priceToCoordinate(+r[0])]).filter(r=>r[1]&&r[2]!=null&&r[2]>-R&&r[2]<H+R)
+          .sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).slice(0,12).forEach(([k,v,y])=>{
+            const r=Math.max(1.5,R*Math.sqrt(Math.abs(v))/M.mx),col=v>0?up:dn;
+            g.beginPath();g.arc(x,y,r,0,6.2832);g.fillStyle=alpha(col,.26);g.fill();
+            g.lineWidth=k===kS?1.6:1;g.strokeStyle=k===kS?kingCol:alpha(col,.8);g.stroke();
+            if(pt){const d=Math.hypot(pt.x-x,pt.y-y);if(d<=r+4&&(!hit||d<hit.d))hit={d,x,y,r,k,v,ts:f.ts,king:k===kS}}})});
+      if(hit){const txt=`${hit.k} strike · ${hit.v>0?"+":"−"}${fmtMoney(Math.abs(hit.v))} gamma · ${nyHM(hit.ts)}${hit.king?" · biggest node":""}`;
+        g.font="11px IBM Plex Mono, ui-monospace, Menlo, monospace";const w=g.measureText(txt).width+12;
+        let bx=hit.x+hit.r+6;if(bx+w>W-4)bx=hit.x-hit.r-6-w;bx=Math.max(4,bx);const by=Math.max(4,Math.min(H-22,hit.y-9));
+        g.fillStyle="rgba(18,18,21,.94)";g.strokeStyle=alpha(hit.v>0?up:dn,.8);g.lineWidth=1;g.beginPath();g.rect(bx,by,w,18);g.fill();g.stroke();
+        g.fillStyle="#ececf1";g.textBaseline="middle";g.fillText(txt,bx+6,by+9.5)}
+    }catch(e){}};
+    const sched=()=>{if(!raf)raf=requestAnimationFrame(paint)};
+    chart.timeScale().subscribeVisibleLogicalRangeChange(sched);
+    chart.subscribeCrosshairMove(p=>{pt=p&&p.point?{x:p.point.x,y:p.point.y}:null;sched()});
+    el.addEventListener("wheel",sched,{passive:true});el.addEventListener("pointermove",sched,{passive:true});
+    if(window.ResizeObserver)new ResizeObserver(sched).observe(el);
+    bubBox.onchange=()=>{try{localStorage.setItem("casebook-gbub",bubBox.checked?"1":"0")}catch(e){}sched()};
+    S.bub=sched;
+  }
   function setTF(k){
     S.tf=k;const rows=tfRows(c,k);
     candles.setData(rows);
     vol.setData(rows.map(r=>({time:r.time,value:r.value,color:alpha(r.close>=r.open?up:dn,.35)})));
     chart.applyOptions({timeScale:{timeVisible:k!=="1d"}});
     document.querySelectorAll("#"+P+"-tf .tv-btn").forEach(b=>b.setAttribute("aria-pressed",b.dataset.tf===k));
-    drawInd();drawMarkers();showOHLC(null);focusCase();
+    drawInd();drawMarkers();showOHLC(null);focusCase();if(S.bub)S.bub();
   }
   // Every print on one contract: the full list from c.contracts when the grader sent it, else the flow prints with that key.
   function focusPrints(k){
