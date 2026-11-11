@@ -2250,7 +2250,7 @@ function mountTV(c,P="tv",read=false){
   const ovSets=gexSets(c), gBox=q("gbub");
   const cv=document.createElement("canvas");cv.className="tv-bub";cv.setAttribute("aria-hidden","true");el.parentNode.appendChild(cv);
   const gline=document.createElement("div");gline.className="tv-gex num";gline.hidden=true;el.parentNode.appendChild(gline);
-  S.dots=[];S.dotSrc=[];
+  S.dots=[];S.dotSrc=S.dotSrc||[];
   S.hit=p=>{if(!p||!p.point)return null;const h=S.dots.filter(d=>Math.hypot(d.x-p.point.x,d.y-p.point.y)<=d.r+3).map(d=>d.f);return h.length?h:null};
   {
     const G_KING="#f5c84c",G_NEG="#a78bfa",G_POS="#5aa9ff",BSEC={"1m":60,"5m":300,"15m":900},meta=new Map();
