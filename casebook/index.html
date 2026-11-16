@@ -602,6 +602,7 @@ table.gx-t td.hot{color:#0e1a0e}
 .rhead .tk{font-size:34px}
 .rhead .meta{color:var(--muted);font-size:13px}
 .rhead .px{margin-left:auto;font-family:var(--f-data);font-size:22px;font-weight:600}
+.rsum{padding:12px 14px}.rsum h3{margin:0 0 6px}.rsum .ix-md{max-width:80ch}
 .rheadline{font-family:var(--f-display);font-size:20px;font-weight:700;margin:0;max-width:70ch}
 .rcard{display:flex;flex-direction:column;gap:10px}
 .rflow h3{margin:0 0 6px}
@@ -2690,6 +2691,7 @@ function renderReads(){
   let body="";
   if(r.status==="done"){
     body=`${r.headline?`<p class="rheadline">${esc(r.headline)}</p>`:""}
+      ${r.summary?`<div class="rsum panel"><h3>Summary</h3><div class="ix-md">${rpMD(String(r.summary))}</div></div>`:""}
       ${readChartHTML(r)}
       ${readFlowHTML(r)}
       ${img?`<div class="rcard"><div class="ractions"><button class="btn primary" type="button" data-act="copy">Copy graphic</button><button class="btn" type="button" data-act="dl">Download PNG</button><span class="hint" id="rd-copy-msg"></span></div><img src="${esc(img)}" alt="${esc(r.ticker)} read card" id="rd-img"></div>`:`<p class="hint">No card image on this read.</p>`}
