@@ -3142,6 +3142,7 @@ function tiCard(s){
   return `<div class="panel gs-card" style="padding:14px 16px">
     <h3><span class="tk">${esc(s.ticker||"")}</span><span class="ti-dir ${dir}">${dir.toUpperCase()}</span><span class="sp">${esc(s.type||"")}${s.horizon?" · "+esc(s.horizon):""}${s.price!=null?" · last "+esc(gsPx(s.price)):""}</span>
       <span class="gs-score${sc>=7?" hi":""}">${esc(s.grade||"")}${isFinite(sc)?" · "+(Math.round(sc*10)/10)+"/10":""}</span></h3>
+    ${s.plan?`<p class="gs-text"><b>Plan:</b> ${esc(s.plan)}</p>`:""}
     ${s.why?`<p class="gs-text">${esc(s.why)}</p>`:""}
     <div class="gs-lv">${s.trigger!=null?`<span class="en">Trigger ${esc(gsPx(s.trigger))}</span>`:""}${s.stop!=null?`<span class="st">Stop ${esc(gsPx(s.stop))}</span>`:""}${s.target!=null?`<span class="tg">Target ${esc(gsPx(s.target))}</span>`:""}${oth.map(l=>`<span>${esc(l.label||"")} ${esc(gsPx(l.price))}</span>`).join("")}</div>
     ${tiChart(s)}
@@ -3162,18 +3163,20 @@ function renderTI(){
   if(!d){body.innerHTML=`<div class="ix-empty"><b>No trade ideas yet.</b><br>The list is written before the open. Your Mac has to be awake for it.</div>`;return}
   const all=d.ideas.filter(s=>s&&s.ticker).slice().sort((a,b)=>(+b.score||0)-(+a.score||0));
   const S=all.filter(s=>tiF==="all"||String(s.direction||"").toLowerCase()===tiF||String(s.horizon||"")===tiF);
+  const R=S.filter(s=>s.watch!==true),P=S.filter(s=>s.watch===true);
   const n=g=>all.filter(s=>String(s.grade||"")===g).length,gr=all.filter(s=>s.outcome&&s.outcome.triggered!=null),tr=gr.filter(s=>s.outcome.triggered).length;
   const IX=d.indexes&&typeof d.indexes==="object"?Object.entries(d.indexes).filter(([k,v])=>v&&typeof v==="object"&&(v.state||v.price!=null)):[];
   body.innerHTML=`
     <div class="ix-head"><span class="tk">Trade Ideas</span><span class="meta">${esc(fmtDate(d.date))}${d.gammaMapDate?" · gamma map from "+esc(shortDate(d.gammaMapDate)):""}</span></div>
     <div class="stats">
-      <div class="stat"><div class="k">Ideas</div><div class="v">${all.length}</div><div class="s">${all.filter(s=>String(s.direction||"").toLowerCase()==="short").length} short</div></div>
+      <div class="stat"><div class="k">Ideas</div><div class="v">${all.filter(s=>s.watch!==true).length}</div><div class="s">${all.filter(s=>s.watch===true).length} more setting up · ${all.filter(s=>String(s.direction||"").toLowerCase()==="short").length} short in all</div></div>
       <div class="stat"><div class="k">A+ / A / B</div><div class="v">${n("A+")} / ${n("A")} / ${n("B")}</div><div class="s">below B is not shown</div></div>
       <div class="stat"><div class="k">Names scanned</div><div class="v">${d.universeCount!=null?esc(d.universeCount):"–"}</div><div class="s">watchlist and top premium</div></div>
       <div class="stat"><div class="k">Triggered</div><div class="v">${gr.length?tr+" / "+gr.length:"–"}</div><div class="s">marked after the close</div></div>
     </div>
     ${IX.length?`<div class="panel" style="padding:10px 16px;margin-top:14px"><div class="ti-bd" style="flex-direction:column;gap:4px">${IX.map(([k,v])=>`<span><b>${esc(k)}</b> ${v.price!=null?esc(gsPx(v.price))+" · ":""}${esc(v.state||"")}</span>`).join("")}</div></div>`:""}
-    ${S.length?`<div class="gs-grid">${S.map(tiCard).join("")}</div>`:`<div class="ix-empty" style="margin-top:14px"><b>${all.length?"No ideas match this filter.":"Nothing scored B or better in this scan."}</b></div>`}
+    ${R.length?`<div class="gs-grid">${R.map(tiCard).join("")}</div>`:`<div class="ix-empty" style="margin-top:14px"><b>${all.length?"No ranked ideas match this filter.":"Nothing scored B or better in this scan."}</b></div>`}
+    ${P.length?`<div class="ix-head" style="margin-top:22px"><span class="tk" style="font-size:22px">Potential setups</span><span class="meta">not triggered yet · shown whatever they score</span></div><p class="hint" style="margin:4px 0 0">In trend and close to the daily 8 or 21 EMA without having tapped it. The plan says what would have to happen first.</p><div class="gs-grid">${P.map(tiCard).join("")}</div>`:""}
     ${d.notes?`<p class="hint" style="margin:14px 0 0">${esc(d.notes)}</p>`:""}`;
 }
 $("#ti-pick").onclick=e=>{const b=e.target.closest(".chip");if(b){tiSel=b.dataset.v;try{localStorage.setItem("casebook-ti",tiSel)}catch(e){}renderTI();window.scrollTo(0,0)}};
