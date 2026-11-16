@@ -761,13 +761,19 @@ table.gs-t tr.r-en td.k{box-shadow:inset 3px 0 0 var(--accent)} table.gs-t tr.r-
 .gs-out{border-top:1px solid var(--line);padding-top:8px;font-size:12.5px;display:flex;flex-wrap:wrap;gap:4px 12px}
 .gs-out b{font-family:var(--f-data)}
 .gs-why{font-size:12px;color:var(--muted);margin:0}
+.ti-dir{font-family:var(--f-data);font-size:11px;font-weight:700;letter-spacing:.06em;padding:2px 7px;border-radius:5px;border:1px solid var(--line)}
+.ti-dir.long{color:var(--win);border-color:rgba(91,228,155,.5)} .ti-dir.short{color:var(--loss);border-color:rgba(255,111,97,.5)}
+.ti-chart{border:1px solid var(--line);border-radius:12px;background:#0b0b0d;overflow:hidden}
+.ti-chart svg{display:block;width:100%;height:auto}
+.ti-bd{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted)} .ti-bd b{font-family:var(--f-data);color:var(--fg)}
+.ti-flag{font-size:12px;color:var(--accent-3);margin:0}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 
 <header class="top wrap">
   <div class="topbar">
     <div class="brand"><h1>Setup Library</h1><span>Gamma and options flow setups that led to big moves</span></div>
-    <nav class="tabs" role="tablist" aria-label="Sections"><button type="button" role="tab" data-tab="cases" aria-selected="true">Library</button><button type="button" role="tab" data-tab="reads" aria-selected="false">Reads</button><button type="button" role="tab" data-tab="watch" aria-selected="false">Watchlist</button><button type="button" role="tab" data-tab="bt" aria-selected="false">Backtest</button><button type="button" role="tab" data-tab="ix" aria-selected="false">Index flow</button><button type="button" role="tab" data-tab="sx" aria-selected="false">Stock flow</button><button type="button" role="tab" data-tab="rp" aria-selected="false">Daily report</button><button type="button" role="tab" data-tab="gs" aria-selected="false">Gamma Setups</button></nav>
+    <nav class="tabs" role="tablist" aria-label="Sections"><button type="button" role="tab" data-tab="cases" aria-selected="true">Library</button><button type="button" role="tab" data-tab="reads" aria-selected="false">Reads</button><button type="button" role="tab" data-tab="watch" aria-selected="false">Watchlist</button><button type="button" role="tab" data-tab="bt" aria-selected="false">Backtest</button><button type="button" role="tab" data-tab="ix" aria-selected="false">Index flow</button><button type="button" role="tab" data-tab="sx" aria-selected="false">Stock flow</button><button type="button" role="tab" data-tab="rp" aria-selected="false">Daily report</button><button type="button" role="tab" data-tab="gs" aria-selected="false">Gamma Setups</button><button type="button" role="tab" data-tab="ti" aria-selected="false">Trade Ideas</button></nav>
     <button class="btn" id="btn-guide" type="button">Grading guide</button>
     <button class="btn" id="btn-export-json" type="button">Export JSON</button>
     <button class="btn" id="btn-export-csv" type="button">Export CSV</button>
@@ -934,6 +940,19 @@ table.gs-t tr.r-en td.k{box-shadow:inset 3px 0 0 var(--accent)} table.gs-t tr.r-
       <div class="rp-jump" id="rp-jump"></div>
     </div>
     <div id="rp-body" class="rp-sec"></div>
+  </div>
+</main>
+<main class="wrap" id="ti-view" hidden>
+  <div class="ix ti">
+    <div class="panel" style="padding:12px 16px">
+      <div class="ix-top">
+        <div class="chips" id="ti-pick"></div>
+        <div class="chips" id="ti-filt"></div>
+        <span class="hint" id="ti-upd"></span>
+      </div>
+      <p class="hint" style="margin:8px 0 0">A test. One ranked list before the open: daily 8 and 21 EMA taps, breakouts, and undercut and reclaims, long and short (a short is the same setup on the inverted chart), scored out of 10 on the chart (4), levels lining up (2), recent options flow (2) and room to the next level (2), plus or minus a point for going with or against the stock's index (QQQ, SPY, IWM or the Dow) and being stronger or weaker than it. Day means it should work today; Swing means it can keep going for 2 to 10 days. Each idea is marked after the close with how it played out. Ideas to look at, not signals. Not financial advice.</p>
+    </div>
+    <div id="ti-body"></div>
   </div>
 </main>
 <main class="wrap" id="gs-view" hidden>
@@ -2583,7 +2602,7 @@ let reads=[], readSel=null, readKind="intraday", comments=null;
 try{readSel=localStorage.getItem("casebook-read")}catch(e){}
 function setTab(t){
   document.querySelectorAll(".tabs [data-tab]").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===t));
-  $("#cases-view").hidden=t!=="cases"&&t!=="bt";$("#reads-view").hidden=t!=="reads";$("#watch-view").hidden=t!=="watch";$("#ix-view").hidden=t!=="ix"&&t!=="sx";$("#rp-view").hidden=t!=="rp";$("#gs-view").hidden=t!=="gs";
+  $("#cases-view").hidden=t!=="cases"&&t!=="bt";$("#reads-view").hidden=t!=="reads";$("#watch-view").hidden=t!=="watch";$("#ix-view").hidden=t!=="ix"&&t!=="sx";$("#rp-view").hidden=t!=="rp";$("#gs-view").hidden=t!=="gs";$("#ti-view").hidden=t!=="ti";
   btOn=t==="bt";$("#bt-sec").hidden=!btOn;$("#list-sec").hidden=btOn;$("#live-sec").style.display=btOn?"none":"";
   ["#btn-export-json","#btn-export-csv","#lbl-import","#btn-new"].forEach(s=>$(s).style.display=t==="cases"?"":"none");
   try{localStorage.setItem("casebook-tab",t)}catch(e){}
@@ -2593,6 +2612,7 @@ function setTab(t){
   if(t==="ix"||t==="sx"){ixGroup=t==="ix"?"index":"stock";renderIX()}
   if(t==="rp")renderRP();
   if(t==="gs")renderGS();
+  if(t==="ti")renderTI();
 }
 /* ---------- watchlist (positions) ---------- */
 let positions=[], wl={q:"",bias:"",st:"live",dte:0,sort:"prem"};
@@ -3083,6 +3103,81 @@ function gsPick(id){gsSel=id;try{localStorage.setItem("casebook-gs",id)}catch(e)
 $("#gs-pick").onclick=e=>{const b=e.target.closest(".chip");if(b)gsPick(b.dataset.v)};
 $("#gs-pick").onchange=e=>{if(e.target.id==="gs-date")gsPick(e.target.value)};
 window.__gsDebug={set:docs=>{gsDocs=docs;renderGS()}};
+/* ---------- trade ideas (pre-market list; tradeIdeas/{date}, written by the Mac's scanner/trade_ideas.py) ---------- */
+let tiDocs=[], tiSel=null, tiF="all";
+try{tiSel=localStorage.getItem("casebook-ti")}catch(e){}
+function tiEma(cl,n){const k=2/(n+1),o=[];let e=null;cl.forEach((c,i)=>{e=e==null?c:c*k+e*(1-k);o.push(i>=n-1?e:null)});return o}
+function tiChart(s){
+  const B=(Array.isArray(s.bars)?s.bars:[]).filter(b=>Array.isArray(b)&&b.length>=5&&isFinite(+b[4]));
+  if(B.length<10)return "";
+  const cl=B.map(b=>+b[4]),E=[[8,"#ffa53d"],[21,"#5aa9ff"],[50,"#b48cff"]].map(([n,c])=>({n,c,v:tiEma(cl,n)}));
+  const show=B.slice(-60),off=B.length-show.length,W=640,H=300,pl=6,pr=64,pt=10,pb=18;
+  const L=[];const add=(label,price,cls)=>{price=+price;if(isFinite(price)&&price>0)L.push({label,price,cls})};
+  add("Trigger",s.trigger,"en");add("Stop",s.stop,"st");add("Target",s.target,"tg");
+  (Array.isArray(s.levels)?s.levels:[]).forEach(l=>{if(l&&!/\bema\b/i.test(l.label||""))add(String(l.label||""),l.price,"lv")});
+  let lo=Math.min(...show.map(b=>+b[3])),hi=Math.max(...show.map(b=>+b[2]));const span0=hi-lo||1;
+  const LV=L.filter(l=>l.cls!=="lv"||(l.price>lo-span0*.35&&l.price<hi+span0*.35));
+  LV.forEach(l=>{lo=Math.min(lo,l.price);hi=Math.max(hi,l.price)});
+  const pad=(hi-lo)*.05||1;lo-=pad;hi+=pad;
+  const x=i=>pl+(i+.5)*(W-pl-pr)/show.length,y=p=>pt+(hi-p)*(H-pt-pb)/(hi-lo),bw=Math.max(2,(W-pl-pr)/show.length*.62);
+  const col={en:"#ffa53d",st:"#ff6f61",tg:"#5be49b",lv:"#8a8a96"};
+  let g="";
+  show.forEach((b,i)=>{const o=+b[1],h=+b[2],l=+b[3],c=+b[4],up=c>=o,k=up?"#5be49b":"#ff6f61";
+    g+=`<line x1="${x(i).toFixed(1)}" x2="${x(i).toFixed(1)}" y1="${y(h).toFixed(1)}" y2="${y(l).toFixed(1)}" stroke="${k}" stroke-width="1"/><rect x="${(x(i)-bw/2).toFixed(1)}" y="${y(Math.max(o,c)).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,Math.abs(y(o)-y(c))).toFixed(1)}" fill="${k}"/>`});
+  E.forEach(e=>{const pts=show.map((b,i)=>e.v[i+off]==null?null:x(i).toFixed(1)+","+y(e.v[i+off]).toFixed(1)).filter(Boolean);
+    if(pts.length>1)g+=`<polyline points="${pts.join(" ")}" fill="none" stroke="${e.c}" stroke-width="1.4" opacity=".9"/>`});
+  const used=[];
+  LV.sort((a,b)=>(a.cls==="lv")-(b.cls==="lv")).forEach(l=>{const yy=y(l.price);let ty=yy+3.5;while(used.some(u=>Math.abs(u-ty)<11))ty+=11;used.push(ty);
+    g+=`<line x1="${pl}" x2="${W-pr}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="${col[l.cls]}" stroke-width="1" stroke-dasharray="${l.cls==="lv"?"2 4":"5 3"}" opacity="${l.cls==="lv"?.7:.95}"/><text x="${W-pr+4}" y="${ty.toFixed(1)}" fill="${col[l.cls]}" font-size="10.5" font-family="var(--f-data)">${esc(gsPx(l.price))}</text>`});
+  const lg=E.map((e,i)=>`<text x="${pl+4+i*58}" y="${H-5}" fill="${e.c}" font-size="10.5" font-family="var(--f-data)">${e.n} EMA</text>`).join("");
+  return `<div class="ti-chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(s.ticker||"")} daily chart, last ${show.length} sessions, with the 8, 21 and 50 EMA and the idea's levels">${g}${lg}<text x="${W-pr-4}" y="${H-5}" text-anchor="end" fill="#8a8a96" font-size="10.5">daily, ${show.length} sessions</text></svg></div>`;
+}
+function tiPct(v){v=+v;return (v>0?"+":v<0?"−":"")+Math.abs(v).toFixed(1)+"%"}
+function tiCard(s){
+  const dir=String(s.direction||"").toLowerCase()==="short"?"short":"long",sc=+s.score,bd=s.breakdown&&typeof s.breakdown==="object"?s.breakdown:null;
+  const o=s.outcome&&typeof s.outcome==="object"&&(s.outcome.triggered!=null||s.outcome.result)?s.outcome:null,f=s.flags||{},ix=s.index&&typeof s.index==="object"?s.index:null;
+  const oth=(Array.isArray(s.levels)?s.levels:[]).filter(l=>l&&isFinite(+l.price)).slice(0,6);
+  const flags=[f.earnings?"Earnings "+(typeof f.earnings==="string"?esc(f.earnings):"within 5 days"):"",f.newsWick?"News-gap wick on the chart":""].filter(Boolean);
+  return `<div class="panel gs-card" style="padding:14px 16px">
+    <h3><span class="tk">${esc(s.ticker||"")}</span><span class="ti-dir ${dir}">${dir.toUpperCase()}</span><span class="sp">${esc(s.type||"")}${s.horizon?" · "+esc(s.horizon):""}${s.price!=null?" · last "+esc(gsPx(s.price)):""}</span>
+      <span class="gs-score${sc>=7?" hi":""}">${esc(s.grade||"")}${isFinite(sc)?" · "+(Math.round(sc*10)/10)+"/10":""}</span></h3>
+    ${s.why?`<p class="gs-text">${esc(s.why)}</p>`:""}
+    <div class="gs-lv">${s.trigger!=null?`<span class="en">Trigger ${esc(gsPx(s.trigger))}</span>`:""}${s.stop!=null?`<span class="st">Stop ${esc(gsPx(s.stop))}</span>`:""}${s.target!=null?`<span class="tg">Target ${esc(gsPx(s.target))}</span>`:""}${oth.map(l=>`<span>${esc(l.label||"")} ${esc(gsPx(l.price))}</span>`).join("")}</div>
+    ${tiChart(s)}
+    ${bd?`<div class="ti-bd"><span>Chart <b>${esc(bd.chart??"–")}/4</b></span><span>Levels <b>${esc(bd.confluence??"–")}/2</b></span><span>Flow <b>${esc(bd.flow??"–")}/2</b></span><span>Room <b>${esc(bd.room??"–")}/2</b></span>${bd.index!=null&&+bd.index?`<span>Index <b>${+bd.index>0?"+":"−"}${esc(Math.abs(+bd.index))}</b></span>`:""}${+bd.penalties?`<span>Taken off <b>${esc(Math.abs(+bd.penalties))}</b></span>`:""}</div>`:""}
+    ${ix&&ix.symbol?`<p class="gs-why">${esc(ix.symbol)}${ix.state?": "+esc(ix.state):""}${isFinite(+ix.rs5)&&ix.rs5!=null?` · vs ${esc(ix.symbol)} 5 days ${tiPct(ix.rs5)}`:""}${isFinite(+ix.rs20)&&ix.rs20!=null?`, 20 days ${tiPct(ix.rs20)}`:""}</p>`:""}
+    ${flags.length?`<p class="ti-flag">${flags.join(" · ")}</p>`:""}
+    ${o?`<div class="gs-out"><span>${o.triggered===false?"Did not trigger":o.triggered?"Triggered":""}</span>${o.maxR!=null&&isFinite(+o.maxR)?`<span>Best move <b>${(+o.maxR).toFixed(1)}R</b></span>`:""}${o.result?`<span><b>${esc(o.result)}</b></span>`:""}</div>`:""}
+  </div>`;
+}
+function renderTI(){
+  const body=$("#ti-body"),pick=$("#ti-pick");if(!body)return;
+  const list=tiDocs.filter(d=>d&&d.date&&Array.isArray(d.ideas)).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  if(!list.find(d=>d.id===tiSel))tiSel=list[0]?list[0].id:null;
+  const d=list.find(x=>x.id===tiSel);
+  pick.innerHTML=list.slice(0,6).map(x=>`<button type="button" class="chip" data-v="${esc(x.id)}" aria-pressed="${x.id===tiSel}">${esc(shortDate(x.date))}</button>`).join("");
+  $("#ti-filt").innerHTML=[["all","All"],["long","Longs"],["short","Shorts"],["Day","Day"],["Swing","Swing"]].map(([v,l])=>`<button type="button" class="chip" data-v="${v}" aria-pressed="${tiF===v}">${l}</button>`).join("");
+  $("#ti-upd").textContent=d&&d.generatedAt?"Scanned "+ago(d.generatedAt):"";
+  if(!d){body.innerHTML=`<div class="ix-empty"><b>No trade ideas yet.</b><br>The list is written before the open. Your Mac has to be awake for it.</div>`;return}
+  const all=d.ideas.filter(s=>s&&s.ticker).slice().sort((a,b)=>(+b.score||0)-(+a.score||0));
+  const S=all.filter(s=>tiF==="all"||String(s.direction||"").toLowerCase()===tiF||String(s.horizon||"")===tiF);
+  const n=g=>all.filter(s=>String(s.grade||"")===g).length,gr=all.filter(s=>s.outcome&&s.outcome.triggered!=null),tr=gr.filter(s=>s.outcome.triggered).length;
+  const IX=d.indexes&&typeof d.indexes==="object"?Object.entries(d.indexes).filter(([k,v])=>v&&typeof v==="object"&&(v.state||v.price!=null)):[];
+  body.innerHTML=`
+    <div class="ix-head"><span class="tk">Trade Ideas</span><span class="meta">${esc(fmtDate(d.date))}${d.gammaMapDate?" · gamma map from "+esc(shortDate(d.gammaMapDate)):""}</span></div>
+    <div class="stats">
+      <div class="stat"><div class="k">Ideas</div><div class="v">${all.length}</div><div class="s">${all.filter(s=>String(s.direction||"").toLowerCase()==="short").length} short</div></div>
+      <div class="stat"><div class="k">A+ / A / B</div><div class="v">${n("A+")} / ${n("A")} / ${n("B")}</div><div class="s">below B is not shown</div></div>
+      <div class="stat"><div class="k">Names scanned</div><div class="v">${d.universeCount!=null?esc(d.universeCount):"–"}</div><div class="s">watchlist and top premium</div></div>
+      <div class="stat"><div class="k">Triggered</div><div class="v">${gr.length?tr+" / "+gr.length:"–"}</div><div class="s">marked after the close</div></div>
+    </div>
+    ${IX.length?`<div class="panel" style="padding:10px 16px;margin-top:14px"><div class="ti-bd" style="flex-direction:column;gap:4px">${IX.map(([k,v])=>`<span><b>${esc(k)}</b> ${v.price!=null?esc(gsPx(v.price))+" · ":""}${esc(v.state||"")}</span>`).join("")}</div></div>`:""}
+    ${S.length?`<div class="gs-grid">${S.map(tiCard).join("")}</div>`:`<div class="ix-empty" style="margin-top:14px"><b>${all.length?"No ideas match this filter.":"Nothing scored B or better in this scan."}</b></div>`}
+    ${d.notes?`<p class="hint" style="margin:14px 0 0">${esc(d.notes)}</p>`:""}`;
+}
+$("#ti-pick").onclick=e=>{const b=e.target.closest(".chip");if(b){tiSel=b.dataset.v;try{localStorage.setItem("casebook-ti",tiSel)}catch(e){}renderTI();window.scrollTo(0,0)}};
+$("#ti-filt").onclick=e=>{const b=e.target.closest(".chip");if(b){tiF=b.dataset.v;renderTI()}};
+window.__tiDebug={set:docs=>{tiDocs=docs;renderTI()}};
 /* ---------- one-time move of chart data into casedata/{id} (royo approved 11/04) ----------
    Scanner cases kept charts/gamma frames/prints in the case doc, so the list snapshot carried ~130 MB.
    For each scan case still holding HEAVY fields: write casedata/{id} from the stored doc, read it back, then
@@ -3144,6 +3239,7 @@ try{const t=localStorage.getItem("casebook-tab");if(t==="reads"||t==="watch"||t=
   db.collection("indexFlow").onSnapshot(snap=>{ixDocs=snap.docs.map(s=>({id:s.id,...s.data()}));if(!$("#ix-view").hidden)renderIX()},()=>{});
   db.collection("questions").onSnapshot(snap=>{qaDocs=snap.docs.map(s=>({id:s.id,...s.data()}));if(!$("#ix-view").hidden)renderQA()},()=>{});
   db.collection("reports").onSnapshot(snap=>{rpDocs=snap.docs.map(s=>({id:s.id,...s.data()}));if(!$("#rp-view").hidden)renderRP()},()=>{});
+  db.collection("tradeIdeas").onSnapshot(snap=>{tiDocs=snap.docs.map(s=>({id:s.id,...s.data()}));if(!$("#ti-view").hidden)renderTI()},()=>{});
   db.collection("gammaSetups").onSnapshot(snap=>{gsDocs=snap.docs.map(s=>({id:s.id,...s.data()}));if(!$("#gs-view").hidden)renderGS()},()=>{});
   C.use("comments").then(cm=>{comments=cm}).catch(()=>{});
   db.collection("cases").onSnapshot(snap=>{
