@@ -773,7 +773,7 @@ table.gs-t tr.r-en td.k{box-shadow:inset 3px 0 0 var(--accent)} table.gs-t tr.r-
 <header class="top wrap">
   <div class="topbar">
     <div class="brand"><h1>Setup Library</h1><span>Gamma and options flow setups that led to big moves</span></div>
-    <nav class="tabs" role="tablist" aria-label="Sections"><button type="button" role="tab" data-tab="cases" aria-selected="true">Library</button><button type="button" role="tab" data-tab="reads" aria-selected="false">Reads</button><button type="button" role="tab" data-tab="watch" aria-selected="false">Watchlist</button><button type="button" role="tab" data-tab="bt" aria-selected="false">Backtest</button><button type="button" role="tab" data-tab="ix" aria-selected="false">Index flow</button><button type="button" role="tab" data-tab="sx" aria-selected="false">Stock flow</button><button type="button" role="tab" data-tab="rp" aria-selected="false">Daily report</button><button type="button" role="tab" data-tab="gs" aria-selected="false">Gamma Setups</button><button type="button" role="tab" data-tab="ti" aria-selected="false">Trade Ideas</button></nav>
+    <nav class="tabs" role="tablist" aria-label="Sections"><button type="button" role="tab" data-tab="cases" aria-selected="true">Library</button><button type="button" role="tab" data-tab="reads" aria-selected="false">Reads</button><button type="button" role="tab" data-tab="watch" aria-selected="false">Watchlist</button><button type="button" role="tab" data-tab="bt" aria-selected="false">Backtest</button><button type="button" role="tab" data-tab="ix" aria-selected="false">Index flow</button><button type="button" role="tab" data-tab="sx" aria-selected="false">Stock flow</button><button type="button" role="tab" data-tab="rp" aria-selected="false">Daily report</button><button type="button" role="tab" data-tab="fd" aria-selected="false">Flow of the day</button><button type="button" role="tab" data-tab="gs" aria-selected="false">Gamma Setups</button><button type="button" role="tab" data-tab="ti" aria-selected="false">Trade Ideas</button></nav>
     <button class="btn" id="btn-guide" type="button">Grading guide</button>
     <button class="btn" id="btn-export-json" type="button">Export JSON</button>
     <button class="btn" id="btn-export-csv" type="button">Export CSV</button>
@@ -927,6 +927,19 @@ table.gs-t tr.r-en td.k{box-shadow:inset 3px 0 0 var(--accent)} table.gs-t tr.r-
         <div class="row"><button class="btn primary" type="submit" id="qa-send">Save question</button><span class="hint" id="qa-msg" aria-live="polite"></span></div>
       </form>
     </div>
+  </div>
+</main>
+<main class="wrap" id="fd-view" hidden>
+  <div class="ix rp">
+    <div class="panel" style="padding:12px 16px">
+      <div class="ix-top">
+        <div class="chips" id="fd-pick"></div>
+        <span class="hint" id="fd-upd"></span>
+      </div>
+      <p class="hint" style="margin:8px 0 0">Written after the close: how QQQ and SPY moved leg by leg and the options flow during each leg, then the liquid leaders: how flow and price moved, whether the scanner caught the move, caught the wrong side or did not trigger and why, and what each trigger buyer did afterwards. "Still open" is only said once the next session's open interest confirms it. Nothing in the scanner changes from this page. Not financial advice.</p>
+      <div class="rp-jump" id="fd-jump"></div>
+    </div>
+    <div id="fd-body" class="rp-sec"></div>
   </div>
 </main>
 <main class="wrap" id="rp-view" hidden>
@@ -2602,7 +2615,7 @@ let reads=[], readSel=null, readKind="intraday", comments=null;
 try{readSel=localStorage.getItem("casebook-read")}catch(e){}
 function setTab(t){
   document.querySelectorAll(".tabs [data-tab]").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===t));
-  $("#cases-view").hidden=t!=="cases"&&t!=="bt";$("#reads-view").hidden=t!=="reads";$("#watch-view").hidden=t!=="watch";$("#ix-view").hidden=t!=="ix"&&t!=="sx";$("#rp-view").hidden=t!=="rp";$("#gs-view").hidden=t!=="gs";$("#ti-view").hidden=t!=="ti";
+  $("#cases-view").hidden=t!=="cases"&&t!=="bt";$("#reads-view").hidden=t!=="reads";$("#watch-view").hidden=t!=="watch";$("#ix-view").hidden=t!=="ix"&&t!=="sx";$("#rp-view").hidden=t!=="rp";$("#fd-view").hidden=t!=="fd";$("#gs-view").hidden=t!=="gs";$("#ti-view").hidden=t!=="ti";
   btOn=t==="bt";$("#bt-sec").hidden=!btOn;$("#list-sec").hidden=btOn;$("#live-sec").style.display=btOn?"none":"";
   ["#btn-export-json","#btn-export-csv","#lbl-import","#btn-new"].forEach(s=>$(s).style.display=t==="cases"?"":"none");
   try{localStorage.setItem("casebook-tab",t)}catch(e){}
@@ -2611,6 +2624,7 @@ function setTab(t){
   if(t==="bt")renderBT();
   if(t==="ix"||t==="sx"){ixGroup=t==="ix"?"index":"stock";renderIX()}
   if(t==="rp")renderRP();
+  if(t==="fd")renderFD();
   if(t==="gs")renderGS();
   if(t==="ti")renderTI();
 }
@@ -3019,6 +3033,32 @@ function rpPick(id){rpSel=id;try{localStorage.setItem("casebook-rp",id)}catch(e)
 $("#rp-pick").onclick=e=>{const b=e.target.closest(".chip");if(b)rpPick(b.dataset.v)};
 $("#rp-pick").onchange=e=>{if(e.target.id==="rp-date")rpPick(e.target.value)};
 $("#rp-jump").onclick=e=>{const b=e.target.closest("[data-j]");if(!b)return;const el=$("#rp-s"+b.dataset.j);if(el)el.scrollIntoView({block:"start",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"})};
+/* ---------- flow of the day (how the market and the leaders moved, with the flow; index-flow thread) ----------
+   flowDay/{date}: same shape as reports/{date}. */
+let fdDocs=[], fdSel=null;
+try{fdSel=localStorage.getItem("casebook-fd")}catch(e){}
+function renderFD(){
+  const body=$("#fd-body"),pick=$("#fd-pick");if(!body)return;
+  const list=fdDocs.filter(d=>d&&d.date&&d.md).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  if(!list.find(d=>d.id===fdSel))fdSel=list[0]?list[0].id:null;
+  const d=list.find(x=>x.id===fdSel);
+  pick.innerHTML=list.slice(0,5).map(x=>`<button type="button" class="chip" data-v="${esc(x.id)}" aria-pressed="${x.id===fdSel}">${esc(shortDate(x.date))}</button>`).join("")
+    +(list.length>5?`<select class="tv-sel" id="fd-date" aria-label="Report date">${list.map(x=>`<option value="${esc(x.id)}" ${x.id===fdSel?"selected":""}>${esc(fmtDate(x.date))}</option>`).join("")}</select>`:"");
+  $("#fd-upd").textContent=d&&d.updatedAt?"Updated "+ago(d.updatedAt):"";
+  if(!d){$("#fd-jump").innerHTML="";body.innerHTML=`<div class="ix-empty"><b>No flow reports yet.</b><br>The first one appears here once it is written after a close.</div>`;return}
+  const secs=rpSections(d.md),stats=Array.isArray(d.stats)?d.stats.filter(s=>s&&s.k):[];
+  $("#fd-jump").innerHTML=secs.filter(s=>s.title).map((s,i)=>`<button type="button" class="chipbtn" data-j="${i}">${esc(s.title.replace(/^\d+[.)]\s*/,""))}</button>`).join("");
+  let n=-1;
+  body.innerHTML=`
+    <div class="ix-head"><span class="tk">Flow of the day</span><span class="meta">${esc(fmtDate(d.date))}</span></div>
+    ${d.headline?`<p class="ix-headline">${esc(d.headline)}</p>`:""}
+    ${stats.length?`<div class="stats">${stats.map(s=>`<div class="stat"><div class="k">${esc(s.k)}</div><div class="v">${esc(s.v??"–")}</div>${s.s?`<div class="s">${esc(s.s)}</div>`:""}</div>`).join("")}</div>`:""}
+    ${secs.map(s=>{if(s.title)n++;return `<div class="panel ix-md"${s.title?` id="fd-s${n}"`:""}>${s.title?`<h2>${esc(s.title)}</h2>`:""}${rpMD(s.lines.join("\n"))}</div>`}).join("")}`;
+}
+function fdPick(id){fdSel=id;try{localStorage.setItem("casebook-fd",id)}catch(e){}renderFD();window.scrollTo(0,0)}
+$("#fd-pick").onclick=e=>{const b=e.target.closest(".chip");if(b)fdPick(b.dataset.v)};
+$("#fd-pick").onchange=e=>{if(e.target.id==="fd-date")fdPick(e.target.value)};
+$("#fd-jump").onclick=e=>{const b=e.target.closest("[data-j]");if(!b)return;const el=$("#fd-s"+b.dataset.j);if(el)el.scrollIntoView({block:"start",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"})};
 /* ---------- gamma setups (morning scan in the style of the Flow God heatmap posts; paper testing tool) ----------
    gammaSetups/{date} (a test run uses id {date}-dryrun and dryRun:true): {date, generatedAtET, source, universe, scanned,
    skipped:[{ticker,why}], rulesVersion, setups:[{ticker, spot, entry, stopUnder, targets:[..], cleanScore, entryRule, stopRule,
@@ -3226,7 +3266,7 @@ $("#mig-go").onclick=async()=>{
 };
 /* ---------- boot ---------- */
 buildFilters();renderLegend();render();
-try{const t=localStorage.getItem("casebook-tab");if(t==="reads"||t==="watch"||t==="bt"||t==="ix"||t==="sx"||t==="rp"||t==="gs")setTab(t)}catch(e){}
+try{const t=localStorage.getItem("casebook-tab");if(t==="reads"||t==="watch"||t==="bt"||t==="ix"||t==="sx"||t==="rp"||t==="fd"||t==="gs")setTab(t)}catch(e){}
 (async()=>{
   const C=window.claude;
   if(!C||!C.use){loaded=true;notice("Saving isn't available here. Entries you add will last until you close the page.");render();return}
@@ -3242,6 +3282,7 @@ try{const t=localStorage.getItem("casebook-tab");if(t==="reads"||t==="watch"||t=
   db.collection("optionsBT").onSnapshot(snap=>{const m={};snap.docs.forEach(s=>{const d=s.data();m[d.date||s.id]=d});optByDay=m;if(btOn)renderBT()},()=>{});
   db.collection("indexFlow").onSnapshot(snap=>{ixDocs=snap.docs.map(s=>({id:s.id,...s.data()}));if(!$("#ix-view").hidden)renderIX()},()=>{});
   db.collection("questions").onSnapshot(snap=>{qaDocs=snap.docs.map(s=>({id:s.id,...s.data()}));if(!$("#ix-view").hidden)renderQA()},()=>{});
+  db.collection("flowDay").onSnapshot(snap=>{fdDocs=snap.docs.map(s=>({id:s.id,...s.data()}));if(!$("#fd-view").hidden)renderFD()},()=>{});
   db.collection("reports").onSnapshot(snap=>{rpDocs=snap.docs.map(s=>({id:s.id,...s.data()}));if(!$("#rp-view").hidden)renderRP()},()=>{});
   db.collection("tradeIdeas").onSnapshot(snap=>{tiDocs=snap.docs.map(s=>({id:s.id,...s.data()}));if(!$("#ti-view").hidden)renderTI()},()=>{});
   db.collection("gammaSetups").onSnapshot(snap=>{gsDocs=snap.docs.map(s=>({id:s.id,...s.data()}));if(!$("#gs-view").hidden)renderGS()},()=>{});
