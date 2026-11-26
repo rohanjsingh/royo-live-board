@@ -268,6 +268,9 @@ html .panel h2,html .sec h3,html .panel summary{color:var(--accent)!important}
 
 .pnl{display:flex;flex-wrap:wrap;gap:6px 14px;margin:8px 0 2px;padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.025);font-family:var(--f-data);font-size:12px}
 .pnl>div{display:flex;align-items:baseline;gap:6px}
+.cm{display:grid;gap:3px;margin:2px 0;padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.025);font-size:12px;line-height:1.4;color:var(--fg)}
+.cm .k{color:var(--muted);font-size:11px;margin-right:6px} .cm .num{font-family:var(--f-data)} .cm .dim{color:var(--muted)}
+.pill.stack{border:1px solid var(--accent,#f5b942);color:var(--accent,#f5b942);background:transparent}
 .pnl .k{color:var(--muted);font-size:11px}
 .pnl b{font-size:15px}
 .pnl b.pos,.pnl-tot b.pos{color:var(--win)} .pnl b.neg,.pnl-tot b.neg{color:var(--loss)}
@@ -1717,6 +1720,28 @@ function renderLive(){
   $("#live-head").innerHTML=`<h2><i class="live-dot"></i>In progress today</h2>${P.length?`<span class="pnl-tot">Total P&amp;L at your sizing <b class="${tot>=0?"pos":"neg"}">${fmtUsd(tot)}</b> <span class="hint">(${P.length} trade${P.length>1?"s":""})</span></span>`:""}<span class="hint">${L.length} setup${L.length>1?"s":""}${upd?" · updated "+nyHM(upd)+" ET":""} · these move into the library once graded after the close</span>`;
   $("#live-cards").innerHTML=L.map(cardHTML).join("")+(X.length?`<details class="live-off" style="grid-column:1/-1"><summary>${X.length} skipped or dropped today: ${X.map(c=>esc(c.ticker)+" "+(c.direction==="short"?"short":"long")).join(", ")}</summary><div class="cards" style="margin-top:10px">${X.map(cardHTML).join("")}</div></details>`:"");
 }
+/* card metrics (display only, never in the score): stop in words, implied move at the alert, stacked prints, path to peak */
+function cmMins(m){m=+m;if(isNaN(m)||m<0)return "";m=Math.round(m);return m<60?m+"m":Math.floor(m/60)+"h "+(m%60)+"m"}
+function cmStack(c){const s=c.stacked;const n=s&&typeof s==="object"?+(s.count??s.n):+s;return n>1?n:0}
+function cmPath(p,label,extra){
+  if(!p||p.peakPct==null||isNaN(+p.peakPct))return "";
+  const noPeak=+p.peakPct<=0, t=cmMins(p.minsToPeak);
+  return `<div><span class="k">${label}</span>${extra?esc(extra)+" · ":""}<span class="num">${p.lowBeforePeakPct!=null&&!noPeak?"low before peak "+fmtSigned(p.lowBeforePeakPct)+" · ":""}${noPeak?"never above entry"+(p.lowBeforePeakPct!=null?" · low "+fmtSigned(p.lowBeforePeakPct):""):"peak "+fmtSigned(p.peakPct)}${t&&!noPeak?" · "+t+" to peak":""}</span>${p.quality&&p.quality!=="ok"?` <span class="dim">(${esc(String(p.quality))})</span>`:""}</div>`;
+}
+function cmHTML(c,full){
+  const im=c.impliedMove,pa=c.path||{},rows=[],sw=c.stopWords&&typeof c.stopWords==="object"?c.stopWords:{initial:c.stopWords};
+  if(sw.initial)rows.push(`<div><span class="k">Stop</span>${esc(sw.initial)}</div>`);
+  if(full&&sw.afterTrim)rows.push(`<div><span class="k">After the trim</span>${esc(sw.afterTrim)}</div>`);
+  if(im&&(im.movePct!=null||im.moveAbs!=null)){
+    const pct=im.movePct!=null?"±"+Math.abs(+im.movePct).toFixed(1)+"%":"",usd=im.moveAbs!=null?"±$"+Math.abs(+im.moveAbs).toFixed(2):"";
+    rows.push(`<div><span class="k">Implied move</span><span class="num">${pct}${pct&&usd?" ("+usd+")":usd}</span>${im.expiry?" to "+esc(shortDate(im.expiry)):""}${im.trimInside===true?" · trim sits inside it":im.trimInside===false?" · trim sits outside it":""}${im.quality&&im.quality!=="ok"?` <span class="dim">(${esc(String(im.quality))})</span>`:""}</div>`);
+  }
+  const o=cmPath(pa.option,"Option",pa.option&&pa.option.contract),s=cmPath(pa.stock,"Stock","");
+  if(o)rows.push(o);if(s)rows.push(s);
+  const sc=full&&c.stacked&&Array.isArray(c.stacked.contracts)?c.stacked.contracts.filter(x=>x&&x.contract).slice(0,8):[];
+  if(sc.length&&cmStack(c))rows.push(`<div><span class="k">Stacked</span>${cmStack(c)} prints${c.stacked.window?" in the "+esc(c.stacked.window):""}: <span class="num">${sc.map(x=>esc(x.contract)+(x.prints>1?" ×"+(+x.prints):"")+(x.premium?" $"+Math.round(+x.premium/1000)+"K":"")).join(", ")}</span></div>`);
+  return rows.length?`<div class="cm">${rows.join("")}</div>`:"";
+}
 function cardHTML(c){
     const mv=+c.movePct, cls=isNaN(mv)?"":(mv>=0?"pos":"neg");
     const conf=CONF.filter(([k])=>(c.confluence||{})[k]).length;
@@ -1731,9 +1756,11 @@ function cardHTML(c){
         ${c.status?`<span class="pill">${esc(ST_LABEL[c.status]||c.status)}</span>`:""}
         ${c.direction?`<span class="pill">${esc(c.direction==="long"?"Long":"Short")}</span>`:""}
         ${c.setupType?`<span class="pill">${esc(c.setupType)}</span>`:""}
+        ${cmStack(c)?`<span class="pill stack" title="Separate qualifying prints on the same side within 15 minutes of the trigger. A label only, never in the score.">${cmStack(c)} stacked</span>`:""}
       </div>
       ${hasChartData(c)&&caseDayBars(c).length>1?`<div class="pchart">${priceChartSVG({...c,bars:caseDayBars(c)},{small:true})}</div>`:`<div class="strip">${stripSVG(c.events)}</div>`}
       ${c.live?livePnlHTML(c):""}
+      ${cmHTML(c)}
       ${c.summary?`<div class="summary">${esc(c.summary)}</div>`:""}
       <div class="pills">${(()=>{const t=tradeOf(c);return t&&t.peakPct!=null?`<span class="tag num" style="color:var(--win);border-color:rgba(91,228,155,.4)">Peak ${fmtSigned(t.peakPct)}${t.peakEst?" est.":""}</span>`:""})()}${newsBadge(c)}${laterBadge(c)}<span class="tag num">${conf}/${CONF.length} confluence</span>${(c.tags||[]).slice(0,5).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
     </article>`;
@@ -1802,6 +1829,7 @@ function openViewNow(c){
      ${c.summary?`<div class="sec"><h3>What happened</h3><div class="prose">${esc(c.summary)}</div></div>`:""}
      ${scoreParts(c).length?`<div class="sec"><h3>Why it scored ${scoreOf(c)}</h3><div class="parts">${scoreParts(c).map(x=>`<span class="${x.pts<0?"neg":x.pts===0?"note":""}">${x.pts?(x.pts>0?"+":"−")+Math.abs(x.pts)+" ":""}${esc(x.label)}</span>`).join("")}</div></div>`:""}
      ${Array.isArray(c.warnings)&&c.warnings.length?`<div class="sec"><h3>Warnings</h3><div class="parts">${c.warnings.map(w=>`<span class="warn">⚠ ${esc(typeof w==="string"?w:(w.label||w.text||""))}</span>`).join("")}</div><p class="hint">Shown for context. Warnings don't change the score.</p></div>`:""}
+     ${cmHTML(c,true)?`<div class="sec"><h3>At the alert and on the way to the peak</h3>${cmHTML(c,true)}<p class="hint">Implied move is the at-the-money call plus put price just after the alert (about 15 minutes delayed). Stacked counts separate ask-side prints of $50K or more on this side, within 5% of the trigger price, in the 15 minutes up to the trigger. The option path follows the paper trader's own contract. Shown for context. None of this changes the score.</p></div>`:""}
      ${tradeHTML(c)}
      ${optBTHTML(c)}
      ${laterHTML(c)}
