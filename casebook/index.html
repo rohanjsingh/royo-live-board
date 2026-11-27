@@ -720,6 +720,13 @@ button.tv-print:hover{border-color:var(--accent)}
 .ix-md td:first-child,.ix-md th:first-child{text-align:left}
 /* daily report tab (nightly scanner + flow report) */
 .rp-sec{display:flex;flex-direction:column;gap:14px}
+.st-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:14px;align-items:start}
+.st-grid .panel{min-width:0;overflow-x:auto} .st-grid h2{margin:0 0 2px;font-size:15px} .st-grid .sub{color:var(--muted);font-size:12px;display:block;margin-bottom:8px}
+.st-t{width:100%;border-collapse:collapse;font-size:13px} .st-t th{font-size:11px;color:var(--muted);text-align:right;font-weight:600;padding:4px 6px;border-bottom:1px solid var(--line)} .st-t th:first-child,.st-t td:first-child{text-align:left}
+.st-t td{padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--f-data);font-variant-numeric:tabular-nums} .st-t td:first-child{font-family:var(--f-body)} .st-t tr.grp td{color:var(--muted);font-size:11px;border-bottom:0;padding-top:10px}
+.st-t .pos{color:var(--win)} .st-t .neg{color:var(--loss)} .st-t .thin{color:var(--muted)}
+.st-bars{display:grid;grid-template-columns:auto 1fr auto;gap:5px 10px;align-items:center;font-size:12px} .st-bars .lb{color:var(--muted);white-space:nowrap} .st-bars .n{font-family:var(--f-data)}
+.st-bars .bar{height:14px;border-radius:4px;background:linear-gradient(90deg,var(--accent-3),var(--accent));min-width:2px}
 .rp .ix-md{max-width:none}
 .rp .ix-md p,.rp .ix-md ul{max-width:95ch}
 .rp .ix-md h3:first-child,.rp .ix-md h2:first-child{margin-top:0}
@@ -776,7 +783,7 @@ table.gs-t tr.r-en td.k{box-shadow:inset 3px 0 0 var(--accent)} table.gs-t tr.r-
 <header class="top wrap">
   <div class="topbar">
     <div class="brand"><h1>Setup Library</h1><span>Gamma and options flow setups that led to big moves</span></div>
-    <nav class="tabs" role="tablist" aria-label="Sections"><button type="button" role="tab" data-tab="cases" aria-selected="true">Library</button><button type="button" role="tab" data-tab="reads" aria-selected="false">Reads</button><button type="button" role="tab" data-tab="watch" aria-selected="false">Watchlist</button><button type="button" role="tab" data-tab="bt" aria-selected="false">Backtest</button><button type="button" role="tab" data-tab="ix" aria-selected="false">Index flow</button><button type="button" role="tab" data-tab="sx" aria-selected="false">Stock flow</button><button type="button" role="tab" data-tab="rp" aria-selected="false">Daily report</button><button type="button" role="tab" data-tab="fd" aria-selected="false">Flow of the day</button><button type="button" role="tab" data-tab="gs" aria-selected="false">Gamma Setups</button><button type="button" role="tab" data-tab="ti" aria-selected="false">Trade Ideas</button></nav>
+    <nav class="tabs" role="tablist" aria-label="Sections"><button type="button" role="tab" data-tab="cases" aria-selected="true">Library</button><button type="button" role="tab" data-tab="reads" aria-selected="false">Reads</button><button type="button" role="tab" data-tab="watch" aria-selected="false">Watchlist</button><button type="button" role="tab" data-tab="bt" aria-selected="false">Backtest</button><button type="button" role="tab" data-tab="st" aria-selected="false">Stats</button><button type="button" role="tab" data-tab="ix" aria-selected="false">Index flow</button><button type="button" role="tab" data-tab="sx" aria-selected="false">Stock flow</button><button type="button" role="tab" data-tab="rp" aria-selected="false">Daily report</button><button type="button" role="tab" data-tab="fd" aria-selected="false">Flow of the day</button><button type="button" role="tab" data-tab="gs" aria-selected="false">Gamma Setups</button><button type="button" role="tab" data-tab="ti" aria-selected="false">Trade Ideas</button></nav>
     <button class="btn" id="btn-guide" type="button">Grading guide</button>
     <button class="btn" id="btn-export-json" type="button">Export JSON</button>
     <button class="btn" id="btn-export-csv" type="button">Export CSV</button>
@@ -930,6 +937,19 @@ table.gs-t tr.r-en td.k{box-shadow:inset 3px 0 0 var(--accent)} table.gs-t tr.r-
         <div class="row"><button class="btn primary" type="submit" id="qa-send">Save question</button><span class="hint" id="qa-msg" aria-live="polite"></span></div>
       </form>
     </div>
+  </div>
+</main>
+<main class="wrap" id="st-view" hidden>
+  <div class="ix">
+    <div class="panel" style="padding:12px 16px">
+      <div class="ix-top">
+        <div class="chips" id="st-range"><button type="button" class="chip" data-v="1">1 session</button><button type="button" class="chip" data-v="5">5</button><button type="button" class="chip" data-v="20">20</button><button type="button" class="chip" data-v="0">All</button></div>
+        <div class="chips" id="st-grade"><button type="button" class="chip" data-v="all">All grades</button><button type="button" class="chip" data-v="top">A+ and A</button><button type="button" class="chip" data-v="b">B</button></div>
+        <span class="hint" id="st-span"></span>
+      </div>
+      <p class="hint" style="margin:8px 0 0">Real graded results from the library, with the scanner's own stop and exit. Win rate is wins out of wins plus losses; scratches are counted separately. Grades are the end-of-day grade (the grade seen at the alert is only stored from 11/23). Rows with under 10 setups are greyed: too few to trust. Nothing in the scanner changes from this page. Not financial advice.</p>
+    </div>
+    <div id="st-body" class="rp-sec"></div>
   </div>
 </main>
 <main class="wrap" id="fd-view" hidden>
@@ -2643,7 +2663,7 @@ let reads=[], readSel=null, readKind="intraday", comments=null;
 try{readSel=localStorage.getItem("casebook-read")}catch(e){}
 function setTab(t){
   document.querySelectorAll(".tabs [data-tab]").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===t));
-  $("#cases-view").hidden=t!=="cases"&&t!=="bt";$("#reads-view").hidden=t!=="reads";$("#watch-view").hidden=t!=="watch";$("#ix-view").hidden=t!=="ix"&&t!=="sx";$("#rp-view").hidden=t!=="rp";$("#fd-view").hidden=t!=="fd";$("#gs-view").hidden=t!=="gs";$("#ti-view").hidden=t!=="ti";
+  $("#cases-view").hidden=t!=="cases"&&t!=="bt";$("#reads-view").hidden=t!=="reads";$("#watch-view").hidden=t!=="watch";$("#ix-view").hidden=t!=="ix"&&t!=="sx";$("#rp-view").hidden=t!=="rp";$("#fd-view").hidden=t!=="fd";$("#st-view").hidden=t!=="st";$("#gs-view").hidden=t!=="gs";$("#ti-view").hidden=t!=="ti";
   btOn=t==="bt";$("#bt-sec").hidden=!btOn;$("#list-sec").hidden=btOn;$("#live-sec").style.display=btOn?"none":"";
   ["#btn-export-json","#btn-export-csv","#lbl-import","#btn-new"].forEach(s=>$(s).style.display=t==="cases"?"":"none");
   try{localStorage.setItem("casebook-tab",t)}catch(e){}
@@ -2653,6 +2673,7 @@ function setTab(t){
   if(t==="ix"||t==="sx"){ixGroup=t==="ix"?"index":"stock";renderIX()}
   if(t==="rp")renderRP();
   if(t==="fd")renderFD();
+  if(t==="st")renderST();
   if(t==="gs")renderGS();
   if(t==="ti")renderTI();
 }
@@ -3061,6 +3082,64 @@ function rpPick(id){rpSel=id;try{localStorage.setItem("casebook-rp",id)}catch(e)
 $("#rp-pick").onclick=e=>{const b=e.target.closest(".chip");if(b)rpPick(b.dataset.v)};
 $("#rp-pick").onchange=e=>{if(e.target.id==="rp-date")rpPick(e.target.value)};
 $("#rp-jump").onclick=e=>{const b=e.target.closest("[data-j]");if(!b)return;const el=$("#rp-s"+b.dataset.j);if(el)el.scrollIntoView({block:"start",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"})};
+/* ---------- stats (graded results by setup, grade, side, stacked prints, time of alert; path to the peak) ----------
+   Computed from the library docs already in memory. Display only. */
+let stN=20, stG="all", stInst="option";
+try{const v=localStorage.getItem("casebook-st");if(v!=null&&v!=="")stN=+v||0}catch(e){}
+function stRes(c){const v=c.resultPct!=null?c.resultPct:c.movePct;return v==null||isNaN(+v)?null:+v}
+function stAgg(L){const w=L.filter(c=>c.outcome==="win").length,l=L.filter(c=>c.outcome==="loss").length,r=L.map(stRes).filter(v=>v!=null);
+  return {n:L.length,w,l,s:L.length-w-l,wr:w+l?100*w/(w+l):null,avg:r.length?r.reduce((a,b)=>a+b,0)/r.length:null}}
+function stRow(label,L){const a=stAgg(L);if(!a.n)return "";
+  return `<tr class="${a.n<10?"thin":""}"><td>${esc(label)}</td><td>${a.n}</td><td>${a.w}</td><td>${a.l}</td><td>${a.s}</td><td>${a.wr==null?"–":a.wr.toFixed(0)+"%"}</td><td class="${a.n<10||a.avg==null?"":a.avg>=0?"pos":"neg"}">${a.avg==null?"–":fmtSigned(a.avg,2)}</td></tr>`}
+function stTable(first,rows){rows=rows.filter(Boolean);return rows.length?`<table class="st-t"><thead><tr><th>${esc(first)}</th><th>Setups</th><th>Wins</th><th>Losses</th><th>Scratch</th><th>Win rate</th><th>Avg result</th></tr></thead><tbody>${rows.join("")}</tbody></table>`:`<p class="hint">Nothing graded in this range.</p>`}
+function stBars(buckets){const mx=Math.max(1,...buckets.map(b=>b[1]));return `<div class="st-bars">${buckets.map(([l,n])=>`<span class="lb">${esc(l)}</span><span><i class="bar" style="display:block;width:${(100*n/mx).toFixed(1)}%;${n?"":"visibility:hidden"}"></i></span><span class="n">${n}</span>`).join("")}</div>`}
+function stMed(a){if(!a.length)return null;a=[...a].sort((x,y)=>x-y);const m=a.length>>1;return a.length%2?a[m]:(a[m-1]+a[m])/2}
+function renderST(){
+  const body=$("#st-body");if(!body)return;
+  $("#st-range").querySelectorAll(".chip").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.v===stN)));
+  $("#st-grade").querySelectorAll(".chip").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===stG)));
+  const G=cases.filter(c=>c.status==="graded"&&!c.example&&c.date&&(c.outcome==="win"||c.outcome==="loss"||c.outcome==="scratch"));
+  const dates=[...new Set(G.map(c=>c.date))].sort().reverse(),use=new Set(stN?dates.slice(0,stN):dates);
+  const gk=c=>{const g=gradeOf(scoreOf(c));return g?g.k:""};
+  const L=G.filter(c=>use.has(c.date)&&(stG==="all"||(stG==="top"?(gk(c)==="ap"||gk(c)==="a"):gk(c)==="b")));
+  const used=[...use].sort(),flag=used.filter(d=>G.some(c=>c.date===d&&c.session&&(c.session.partial||c.session.halfDay)));
+  $("#st-span").textContent=used.length?`${used.length} session${used.length>1?"s":""}: ${shortDate(used[0])}${used.length>1?" to "+shortDate(used[used.length-1]):""}${flag.length?" · includes partial or half-day sessions: "+flag.map(shortDate).join(", "):""}`:"";
+  if(!L.length){body.innerHTML=`<div class="ix-empty"><b>No graded setups in this range.</b><br>Results appear here after the close, once the day is graded.</div>`;return}
+  const T=stAgg(L),types=[...new Set(L.map(c=>c.setupType||"Other"))].sort((a,b)=>L.filter(c=>(c.setupType||"Other")===b).length-L.filter(c=>(c.setupType||"Other")===a).length);
+  const byType=types.map(t=>{const X=L.filter(c=>(c.setupType||"Other")===t);return `<tr class="grp"><td colspan="7">${esc(t)}</td></tr>`+stRow("All grades",X)+GRADES.map(g=>stRow(g.g,X.filter(c=>gk(c)===g.k))).join("")}).join("");
+  const stk=c=>c.stacked&&typeof c.stacked==="object"?+c.stacked.count:NaN;
+  const side=[stRow("Longs",L.filter(c=>c.direction==="long")),stRow("Shorts",L.filter(c=>c.direction==="short")),
+    `<tr class="grp"><td colspan="7">Prints stacked in the 15 minutes to the trigger</td></tr>`,
+    stRow("2 or more stacked",L.filter(c=>stk(c)>=2)),stRow("1 print",L.filter(c=>stk(c)===1)),stRow("None counted",L.filter(c=>stk(c)===0)),stRow("No saved flow to count",L.filter(c=>isNaN(stk(c))))];
+  const tm=c=>toMin((c.alert&&c.alert.at)||c.entryTime),hh=m=>{const h=Math.floor(m/60),x=m%60;return (h>12?h-12:h)+":"+String(x).padStart(2,"0")};
+  const bk={};L.forEach(c=>{const m=tm(c);if(m==null)return;const b=Math.max(570,Math.floor(m/30)*30);(bk[b]=bk[b]||[]).push(c)});
+  const time=Object.keys(bk).map(Number).sort((a,b)=>a-b).map(b=>stRow(hh(b)+" to "+hh(b+30)+" ET",bk[b]));
+  const W=L.filter(c=>c.outcome==="win"),pk=c=>{const p=(c.path||{})[stInst];return p&&p.peakPct!=null&&+p.peakPct>0&&(stInst!=="option"||p.quality!=null)?p:null},P=W.map(pk).filter(Boolean);
+  const mins=P.map(p=>+p.minsToPeak).filter(v=>!isNaN(v)),dips=P.map(p=>+p.lowBeforePeakPct).filter(v=>!isNaN(v)).map(v=>Math.min(0,v));
+  const cnt=(a,f)=>a.filter(f).length;
+  const tb=[["Under 15 min",cnt(mins,v=>v<15)],["15 to 30 min",cnt(mins,v=>v>=15&&v<30)],["30 to 60 min",cnt(mins,v=>v>=30&&v<60)],["1 to 2 hours",cnt(mins,v=>v>=60&&v<120)],["2 to 4 hours",cnt(mins,v=>v>=120&&v<240)],["Over 4 hours",cnt(mins,v=>v>=240)]];
+  const E=stInst==="option"?[[0,"No dip"],[-10,"Up to −10%"],[-25,"−10% to −25%"],[-50,"−25% to −50%"],[-999,"Worse than −50%"]]:[[0,"No dip"],[-0.25,"Up to −0.25%"],[-0.5,"−0.25% to −0.5%"],[-1,"−0.5% to −1%"],[-999,"Worse than −1%"]];
+  const db=E.map(([lo,l],i)=>[l,cnt(dips,v=>i===0?v===0:(v<(i===1?0:E[i-1][0])&&v>=lo))]);
+  const mm=stMed(mins),md=stMed(dips),seg=`<span class="chips" id="st-inst" style="display:inline-flex;margin-left:8px"><button type="button" class="chip" data-v="option" aria-pressed="${stInst==="option"}">Option</button><button type="button" class="chip" data-v="stock" aria-pressed="${stInst==="stock"}">Stock</button></span>`;
+  const who=stInst==="option"?"the paper trader's option (only setups where it bought a contract, from 11/05)":"the stock, from the entry";
+  body.innerHTML=`
+    <div class="stats"><div class="stat"><div class="k">Graded setups</div><div class="v">${T.n}</div><div class="s">${used.length} session${used.length>1?"s":""}</div></div>
+      <div class="stat"><div class="k">Win rate</div><div class="v">${T.wr==null?"–":T.wr.toFixed(0)+"%"}</div><div class="s">${T.w} wins, ${T.l} losses</div></div>
+      <div class="stat"><div class="k">Scratches</div><div class="v">${T.s}</div><div class="s">not in the win rate</div></div>
+      <div class="stat"><div class="k">Average result</div><div class="v">${T.avg==null?"–":fmtSigned(T.avg,2)}</div><div class="s">stock, per setup</div></div></div>
+    <div class="st-grid">
+      <div class="panel"><h2>By setup and grade</h2><span class="sub">end-of-day grade</span>${stTable("Setup",[byType])}</div>
+      <div class="panel"><h2>Side and stacked prints</h2><span class="sub">stacked is a label only, never in the score</span>${stTable("Group",side)}</div>
+      <div class="panel"><h2>Time of alert</h2><span class="sub">half-hour buckets, Eastern time; alert time from 11/23, trigger time before</span>${stTable("Window",time)}</div>
+      <div class="panel"><h2>Time to peak${seg}</h2><span class="sub">${P.length} winners measured on ${who}${mm!=null?" · median "+cmMins(mm):""}</span>${P.length?stBars(tb):`<p class="hint">No winners with a recorded path in this range.</p>`}</div>
+      <div class="panel"><h2>Low before peak</h2><span class="sub">how far those winners dipped before their best price${md!=null?" · median "+fmtSigned(md,stInst==="option"?0:2):""}</span>${P.length?stBars(db):`<p class="hint">No winners with a recorded path in this range.</p>`}</div>
+    </div>`;
+}
+$("#st-view").addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;const p=b.parentElement.id;
+  if(p==="st-range"){stN=+b.dataset.v;try{localStorage.setItem("casebook-st",String(stN))}catch(e){}}
+  else if(p==="st-grade")stG=b.dataset.v;else if(p==="st-inst")stInst=b.dataset.v;else return;
+  renderST()});
+
 /* ---------- flow of the day (how the market and the leaders moved, with the flow; index-flow thread) ----------
    flowDay/{date}: same shape as reports/{date}. */
 let fdDocs=[], fdSel=null;
@@ -3294,7 +3373,7 @@ $("#mig-go").onclick=async()=>{
 };
 /* ---------- boot ---------- */
 buildFilters();renderLegend();render();
-try{const t=localStorage.getItem("casebook-tab");if(t==="reads"||t==="watch"||t==="bt"||t==="ix"||t==="sx"||t==="rp"||t==="fd"||t==="gs")setTab(t)}catch(e){}
+try{const t=localStorage.getItem("casebook-tab");if(t==="reads"||t==="watch"||t==="bt"||t==="ix"||t==="sx"||t==="rp"||t==="fd"||t==="st"||t==="gs")setTab(t)}catch(e){}
 (async()=>{
   const C=window.claude;
   if(!C||!C.use){loaded=true;notice("Saving isn't available here. Entries you add will last until you close the page.");render();return}
@@ -3316,7 +3395,7 @@ try{const t=localStorage.getItem("casebook-tab");if(t==="reads"||t==="watch"||t=
   db.collection("gammaSetups").onSnapshot(snap=>{gsDocs=snap.docs.map(s=>({id:s.id,...s.data()}));if(!$("#gs-view").hidden)renderGS()},()=>{});
   C.use("comments").then(cm=>{comments=cm}).catch(()=>{});
   db.collection("cases").onSnapshot(snap=>{
-    const all=snap.docs.map(s=>({id:s.id,...s.data()}));liveCases=all.filter(c=>c.live===true);cases=all.filter(c=>c.live!==true);liveCases.concat(cases).forEach(c=>{const hg=/Holy Grail/g;if(typeof c.setupType==="string")c.setupType=c.setupType.replace(hg,"Flush");if(typeof c.title==="string")c.title=c.title.replace(hg,"Flush")});loaded=true;if(migrating)return;render();migBanner();
+    const all=snap.docs.map(s=>({id:s.id,...s.data()}));liveCases=all.filter(c=>c.live===true);cases=all.filter(c=>c.live!==true);liveCases.concat(cases).forEach(c=>{const hg=/Holy Grail/g;if(typeof c.setupType==="string")c.setupType=c.setupType.replace(hg,"Flush");if(typeof c.title==="string")c.title=c.title.replace(hg,"Flush")});loaded=true;if(migrating)return;render();migBanner();if(!$("#st-view").hidden)renderST();
   },err=>{loaded=true;notice("Couldn't load saved case studies. Reload the page to try again.");render()});
 })();
 })();
